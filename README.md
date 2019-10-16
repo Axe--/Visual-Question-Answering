@@ -20,21 +20,9 @@ Baseline VQA PyTorch implementation for Open-Ended Question-Answering
 We use images from the MS COCO dataset
 
 - The images are partitioned into two sets of object categories, with varying degrees of difficulty: <br>
-  <b>Easy Partitions</b> <br>
-  Set A <i>
-  * person, pizza, laptop, tv, chair, couch, dining table, refrigerator, 
-    oven, sink, suitcase, broccoli, handbag, backpack, cat </i>
-    
-  Set B <i>
-  * stop sign, fire hydrant, traffic light, bus, truck, car, bicycle,
-    motorcycle, boat, airplane, bench, sheep, cow, horse </i>
-  
-  <b>Challenging Partitions</b> <br>
-  Set A <i>
-  * tv, laptop, keyboard, couch, chair, bed, dining table, teddy bear </i>
-  
-  Set B <i>
-  * refrigerator, toaster, sink, microwave, oven, bowl </i>
+  <b>...</b> <br>
+  Set A 
+  * ...
   
   
 - <b><i>TO-DO</i></b>:: Instead of using the entire cropped regions as candidates, mask out the background 

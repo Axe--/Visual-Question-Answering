@@ -3,3 +3,4 @@ results*
 .DS_Store
 log*
 .ipynb_checkpoints*
+VQA_baseline_with_notes.ipynb

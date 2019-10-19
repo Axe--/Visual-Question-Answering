@@ -1,6 +1,9 @@
-data*
-results*
+*.jpg
+*.png
+*.json
+*.pickle
+*.ipynb
+.ipynb_checkpoints*
 .DS_Store
 log*
-.ipynb_checkpoints*
-VQA_baseline_with_notes.ipynb
+results*

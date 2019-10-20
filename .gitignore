@@ -2,3 +2,9 @@ results*
 .DS_Store
 log*
 *machine_translation*
+*.jpg
+*.png
+*.json
+*.pickle
+.ipynb_checkpoints*
+.DS_Store

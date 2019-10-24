@@ -18,11 +18,15 @@ def pad_sequences(seq, max_len):
 
 
 # Sort data (desc.) based on sequence lengths of batch sample (needed for pad_packed_sequence)
-def sort_batch(X, y, seq_lens):
-    seq_lens, idx = seq_lens.sort(dim=0, descending=True)
-    X = X[idx]
-    y = y[idx]
-    return X.transpose(0, 1), y, seq_lens    # transpose (batch x seq) to (seq x batch)
+def sort_batch(images, questions, answers, ques_seq_lens):
+    # question --> (batch_size, sequence_length)
+
+    ques_seq_lens, idx = ques_seq_lens.sort(dim=0, descending=True)
+    questions = questions[idx]
+    answers = answers[idx]
+    images = images[idx]
+
+    return images, questions, answers, ques_seq_lens
 
 
 def preprocess_text(text):
@@ -73,7 +77,10 @@ def build_vocab(data):
 
     # Build word to index mapping
     helper_tokens = {'<PAD>': 0, '<START>': 1, '<END>': 2}
-    vocab = {word: idx + 3 for idx, word in enumerate(list(vocab)) if word not in helper_tokens}
+
+    # TODO:: Add the <UNKNOWN> tag for unseen words (Needed to handle Validation & Test sets)
+
+    vocab = {word: idx + 3 for idx, word in enumerate(list(vocab)) if word not in helper_tokens}  # TODO: change +3 to 4
 
     word2idx = {**helper_tokens, **vocab}
 

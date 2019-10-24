@@ -28,8 +28,6 @@ class VQADataset(Dataset):
         # Build question vocabulary -- word2idx & idx2word mappings
         self.word2idx, self.idx2word, self.max_len_sequence = build_vocab(self.data)
 
-        # self.length = [sum(1 - np.equal(x, 0)) for x in self.question]
-
         self.transform = transform
 
     def __len__(self):
@@ -126,6 +124,7 @@ class VQADataset(Dataset):
             return data
 
 
+# TODO:: Data Augmentation - Image Transforms
 class ToTensor(object):
     """Convert numpy arrays to Tensors"""
 

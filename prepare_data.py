@@ -1,3 +1,11 @@
+"""
+Given the VQA annotations & questions file, generates a dataset file (.txt) in the following format:
+
+`image_name` \t `question` \t `answer`
+
+The resulting file vqa_dataset.txt is stored in the --output_dir
+"""
+
 import argparse
 import os
 from datahelper import VQA as DataHelper
@@ -11,12 +19,9 @@ def pad_with_zero(num):
 
 parser = argparse.ArgumentParser(description='Prepare data for balanced real images QA aka COCO')
 
-parser.add_argument('-a', '--annot_file', type=str, help='path to annotations file (.json)',
-                    required=True)
-parser.add_argument('-q', '--ques_file', type=str, help='path to questions file (.json)',
-                    required=True)
-parser.add_argument('-o', '--output_dir', type=str, help='stores the dataset file (img, ques, ans) - vqa_dataset.txt',
-                    required=True)
+parser.add_argument('-a', '--annot_file',   type=str, help='path to annotations file (.json)', required=True)
+parser.add_argument('-q', '--ques_file',    type=str, help='path to questions file (.json)', required=True)
+parser.add_argument('-o', '--output_dir',   type=str, help='stores vqa_dataset.txt (img, ques, ans)', required=True)
 
 group = parser.add_mutually_exclusive_group()
 group.add_argument("--balanced_real_images", action="store_true",

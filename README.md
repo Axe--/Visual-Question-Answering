@@ -1,5 +1,5 @@
-# VQA Baseline
-Baseline VQA PyTorch implementation for Open-Ended Question-Answering
+# VQA Baseline + BERT pre-trained embedding
+VQA PyTorch implementation for Open-Ended Question-Answering
 
 
 

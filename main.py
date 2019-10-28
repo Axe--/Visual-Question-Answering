@@ -7,15 +7,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
-from dataloader import VQADataset, ToTensor
 from model import VQABaselineNet
 from utils import sort_batch
+from dataloader import VQADataset, ToTensor
+from dataloader import frequent_answers, filter_samples_by_label
 
 """
-Train:
-python3 main.py --mode train --model_name sample_model --img_dir /home/axe/Datasets/VQA_Dataset/train2014 \
---train_file /home/axe/Datasets/VQA_Dataset/vqa_dataset.txt --val_file /home/axe/Projects/VQA_baseline/sample_data.txt \
---log_dir /home/axe/Projects/VQA_baseline/results_log --gpu_id 1 --num_epochs 50 --batch_size 2 --num_cls 1000
+Train (with validation):
+python3 main.py --mode train --model_name sample_model --train_img /home/axe/Datasets/VQA_Dataset/train2014 
+--train_file /home/axe/Datasets/VQA_Dataset/vqa_dataset.txt --val_file /home/axe/Projects/VQA_baseline/sample_data.txt 
+--val_img /home/axe/Datasets/VQA_Dataset/train2014 --log_dir /home/axe/Projects/VQA_baseline/results_log 
+--gpu_id 1 --num_epochs 50 --batch_size 16 --num_cls 1000
 
 Test:
 """
@@ -68,9 +70,9 @@ def compute_accuracy(model, dataloader, device, show_preds=False, mode='Validati
 
             # Compute Accuracy
             label_predicted = torch.argmax(label_logits, dim=1)
-            correct = (label == label_predicted).float()
+            correct = (label == label_predicted)
 
-            num_correct += sum(correct)
+            num_correct += correct.sum().item()
             total += len(label)
 
             # TODO: Visualize with TensorBoardX
@@ -85,9 +87,10 @@ if __name__ == '__main__':
 
     parser.add_argument('--mode',             type=str,      help='train or test', default='train')
     parser.add_argument('--model_name',       type=str,      help='model save ckpt folder', default='baseline_model')
-    parser.add_argument('--img_dir',          type=str,      help='path to images directory', required=True)
+    parser.add_argument('--train_img',        type=str,      help='path to training images directory', required=True)
     parser.add_argument('--train_file',       type=str,      help='train file', required=True)
     parser.add_argument('--val_file',         type=str,      help='validation file')
+    parser.add_argument('--val_img',          type=str,      help='path to validation images directory')
     parser.add_argument('--num_cls',          type=int,      help='top K answers used as class labels', default=1000)
     parser.add_argument('--batch_size',       type=int,      help='batch size', default=8)
     parser.add_argument('--num_epochs',       type=int,      help='number of epochs', default=50)
@@ -117,11 +120,19 @@ if __name__ == '__main__':
     #     model = nn.DataParallel(model, device_ids=[0, 1])
     # model.to(device)
 
+    # Calculate the K most frequent answers from the dataset
+    labels = frequent_answers(args.train_file, args.num_cls)
+
+    # Filter out samples which don't have answer in the top-K labels set
+    train_data = filter_samples_by_label(args.train_file, labels)
+
     # Train
     if args.mode == 'train':
         # Dataset & Dataloader
-        train_dataset = VQADataset(args.train_file, args.img_dir, K=args.num_cls, transform=transforms.Compose([ToTensor()]))
-        train_loader = torch.utils.data.DataLoader(train_dataset, batch_size, shuffle=True)
+        train_dataset = VQADataset(train_data, labels, args.train_img, transform=transforms.Compose([ToTensor()]))
+        train_loader = torch.utils.data.DataLoader(train_dataset, batch_size, shuffle=True, drop_last=True)
+
+        print('Train Data Length {}'.format(train_dataset.__len__()))
 
         """
         for sample_data in train_loader:
@@ -141,8 +152,11 @@ if __name__ == '__main__':
         """
 
         if args.val_file:
-            val_dataset = VQADataset(args.val_file, args.img_dir, K=args.num_cls, transform=transforms.Compose([ToTensor()]))
-            val_loader = torch.utils.data.DataLoader(val_dataset, batch_size, shuffle=False)
+            # Filter samples from the validation set, using top K labels from the training set
+            val_data = filter_samples_by_label(args.val_file, labels)
+
+            val_dataset = VQADataset(val_data, labels, args.val_img, transform=transforms.Compose([ToTensor()]))
+            val_loader = torch.utils.data.DataLoader(val_dataset, batch_size, shuffle=False, drop_last=True)
 
         # Question Encoder params
         vocabulary_size = len(train_dataset.word2idx.keys())
@@ -182,6 +196,7 @@ if __name__ == '__main__':
         start_time = time.time()
         curr_step = 0
         best_val_acc = 0.0   # TODO: Save model with best validation accuracy
+
         for epoch in range(n_epochs):
             for batch_data in train_loader:
                 # Load batch data
@@ -241,7 +256,7 @@ if __name__ == '__main__':
 
     # Test
     elif args.mode == 'test':
-        test_dataset = VQADataset(args.val_file, args.img_dir, K=args.num_cls, transform=transforms.Compose([ToTensor()]))
+        test_dataset = VQADataset(args.val_file, args.train_img, K=args.num_cls, transform=transforms.Compose([ToTensor()]))
         test_loader = torch.utils.data.DataLoader(test_dataset, batch_size, shuffle=False)
 
         checkpoint = torch.load(args.model_ckpt_file)
@@ -270,4 +285,4 @@ if __name__ == '__main__':
         print('Model successfully loaded from {}'.format(args.model_ckpt_file))
 
         # Compute test accuracy
-        compute_accuracy(model, test_loader, args.threshold_acc, device, show_preds=True, mode='Test')
+        compute_accuracy(model, test_loader, device, show_preds=True, mode='Test')

@@ -56,7 +56,7 @@ class ImageEncoder(nn.Module):
         vgg_layers += list([vgg11.avgpool, nn.Flatten()])
         vgg_layers += list(vgg11.classifier.children())[0:4]
 
-        # VGG Encoder: 224 x 224 ---pool 5x---> 7 x 7  ---FC + L2_norm---> 4096-dim
+        # VGG Encoder: 224 x 224 ---[pool 5x]---> 7 x 7  ---[FC + L2_norm]---> 4096-dim
         self.vgg11_encoder = nn.Sequential(*vgg_layers)
 
         # Image embedding layer (1024-dim)
@@ -102,7 +102,8 @@ class QuestionEncoder(nn.Module):
 
         # RNN Layer: (input_dim, hidden_units)
         self.gru = nn.GRU(self.input_embedding_dim, self.encoder_hidden_units)
-        self.hidden = None  # hidden state of the encoder
+        # hidden state of the encoder
+        self.hidden = None
 
         # Question embedding layer (1024-dim)
         self.embedding_layer = nn.Linear(in_features=enc_units, out_features=1024)
@@ -118,6 +119,7 @@ class QuestionEncoder(nn.Module):
                 | `after torch.squeeze(dim=0)`
         """
         x = self.word_embedding_matrix(x)
+        # x.shape : (seq_len, batch_size, emb_dim)
 
         # Without packed padded sequences, hidden and cell are tensors from the last element in the sequence,
         # which will most probably be a pad token, however when using packed padded sequences
@@ -126,10 +128,23 @@ class QuestionEncoder(nn.Module):
 
         self.hidden = self.initialize_hidden_state(device)
 
-        # x.shape : (seq_len, batch_size, emb_dim)
-        output, self.hidden = self.gru(x, self.hidden)
+        output = None
+        try:
+            # Fwd Pass
+            output, self.hidden = self.gru(x, self.hidden)
+
+        except RuntimeError:
+            print(x.shape)
+            print(self.hidden.shape)
+            print()
+
+        # Pad back (but to max-length of the mini-batch)
         output, _ = pad_packed_sequence(output)
         # ^^ batch elements will be ordered decreasingly by their length
+
+        # *** Note on pack_padded_sequence() & pad_packed_sequence():
+        # given a batch of sequences padded to global_max_len, after applying above functions,
+        # we get a batch of sequences of local_max_len (i.e. max length of sequence in the mini-batch & NOT the dataset)
 
         # We can use either hidden or out[-1]
         # Squeeze: [1, batch_size, enc_hidden_units] --> [batch_size, enc_hidden_units]

@@ -11,15 +11,15 @@ from utils import build_vocab, preprocess_text, pad_sequences
 class VQADataset(Dataset):
     """VQA Dataset"""
 
-    def __init__(self, dataset_file, img_dir, K, transform=None):
-        self.dataset_file_path = dataset_file
+    def __init__(self, data, labels, img_dir, transform=None):
+        """
+        :param data: filtered dataset samples ("img_name question answer")
+        :param labels: top K answer list
+        :param img_dir: path to images directory
+        :param transform: image transform functions (data augmentation)
+        """
+        self.data = data
         self.images_dir = img_dir
-
-        # Calculate the K most frequent answers from the dataset
-        labels = self.frequent_answers(self.dataset_file_path, K)
-
-        # Filter out samples which don't have answer in the top-K labels
-        self.data = self.filter_samples_by_label(self.dataset_file_path, labels)
 
         # Map labels to indexes
         self.label_to_idx = {label: idx for idx, label in enumerate(labels)}
@@ -63,68 +63,68 @@ class VQADataset(Dataset):
 
         return img_ques_ans
 
-    @staticmethod
-    def frequent_answers(file_path, K):
-        """
-        We treat answer tokens as class labels;
-        the top K most frequent answers are selected
 
-        :param file_path: path to dataset file
-        :param K: num of labels
-        :return: `K` most frequent answers
-        :rtype: list
-        """
-        with open(file_path, 'r') as file_in:
-            answer_frequency_dict = {}
+def frequent_answers(file_path, K):
+    """
+    We treat answer tokens as class labels;
+    the top K most frequent answers are selected
 
-            line = file_in.readline()
+    :param file_path: path to dataset file
+    :param K: num of labels
+    :return: `K` most frequent answers
+    :rtype: list
+    """
+    with open(file_path, 'r') as file_in:
+        answer_frequency_dict = {}
 
-            while line:
-                answer = line.strip().split('\t')[2]
+        line = file_in.readline()
 
-                if answer in answer_frequency_dict:
-                    answer_frequency_dict[answer] += 1
-                else:
-                    answer_frequency_dict[answer] = 1
+        while line:
+            answer = line.strip().split('\t')[2]
 
-                line = file_in.readline()
-
-            top_k_answers = sorted(answer_frequency_dict.items(), key=lambda kv: kv[1])[:K]
-            top_k_answers = [ans for ans, cnt in top_k_answers]
-
-            return top_k_answers
-
-    @staticmethod
-    def filter_samples_by_label(file_path, labels):
-        """
-        Filters out samples that don't contain answers in the labels list
-
-        :param file_path: path to dataset file
-        :param labels: answer labels
-        :type labels: list
-
-        :return: filtered list of samples from the data file
-        """
-        # Convert to HashSet: O(1) lookup
-        labels = set(labels)
-
-        with open(file_path, 'r') as file_in:
-            data = []
+            if answer in answer_frequency_dict:
+                answer_frequency_dict[answer] += 1
+            else:
+                answer_frequency_dict[answer] = 1
 
             line = file_in.readline()
 
-            while line:
-                answer = line.strip().split('\t')[2]
+        top_k_answers = sorted(answer_frequency_dict.items(), reverse=True, key=lambda kv: kv[1])[:K]
+        top_k_answers = [ans for ans, cnt in top_k_answers]
 
-                if answer in labels:
-                    data.append(line)
-
-                line = file_in.readline()
-
-            return data
+        return top_k_answers
 
 
-# TODO:: Data Augmentation - Image Transforms
+def filter_samples_by_label(file_path, labels):
+    """
+    Filters out samples that don't contain answers in the labels list
+
+    :param file_path: path to dataset file
+    :param labels: answer labels
+    :type labels: list
+
+    :return: filtered list of samples from the data file
+    """
+    # Convert to HashSet: O(1) lookup
+    labels = set(labels)
+
+    with open(file_path, 'r') as file_in:
+        data = []
+
+        line = file_in.readline()
+
+        while line:
+            answer = line.strip().split('\t')[2]
+
+            if answer in labels:
+                data.append(line)
+
+            line = file_in.readline()
+
+        return data
+
+
+# TODO:: Data Augmentation - Image Transformations
 class ToTensor(object):
     """Convert numpy arrays to Tensors"""
 

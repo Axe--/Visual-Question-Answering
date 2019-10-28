@@ -127,9 +127,10 @@ VQABaselineNet(
 Run the following script for training:
 
 ```bash
-$ python3 main.py --mode train --model_name sample_model --img_dir /home/axe/Datasets/VQA_Dataset/train2014 \
+$ python3 main.py --mode train --model_name sample_model --train_img /home/axe/Datasets/VQA_Dataset/train2014 \
 --train_file /home/axe/Datasets/VQA_Dataset/vqa_dataset.txt --val_file /home/axe/Projects/VQA_baseline/sample_data.txt \
---log_dir /home/axe/Projects/VQA_baseline/results_log --gpu_id 1 --num_epochs 50 --batch_size 2 --num_cls 1000
+--val_img /home/axe/Datasets/VQA_Dataset/train2014 --log_dir /home/axe/Projects/VQA_baseline/results_log \
+--gpu_id 1 --num_epochs 50 --batch_size 16 --num_cls 1000
 ```
 
 

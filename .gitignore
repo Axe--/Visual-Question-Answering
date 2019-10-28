@@ -9,6 +9,9 @@ log*
 *.png
 *.json
 *.pickle
-/.ipynb_checkpoints/*
+/.ipynb_checkpoints*
 .DS_Store
-/.pytest_cache/*
+/.pytest_cache*
+/__pycache__*
+/.idea*
+**/raw_zip/*

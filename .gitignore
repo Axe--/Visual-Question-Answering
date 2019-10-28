@@ -1,10 +1,14 @@
+VQA_baseline_with_notes.ipynb
 results*
 .DS_Store
 log*
 *machine_translation*
+*.txt
+*.zip
 *.jpg
 *.png
 *.json
 *.pickle
-.ipynb_checkpoints*
+/.ipynb_checkpoints/*
 .DS_Store
+/.pytest_cache/*

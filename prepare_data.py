@@ -9,7 +9,7 @@ The resulting file vqa_dataset.txt is stored in the --output_dir
 import argparse
 import os
 from datahelper import VQA as DataHelper
-
+from transformers import BertTokenizer
 
 def pad_with_zero(num):
     total_digits = 6 if args.balanced_real_images else 5
@@ -43,13 +43,14 @@ elif args.abstract_scene_images:
     image_prefix += "abstract_v002_train2015_0000000"
     image_postfix = ".png"
 
-helper = DataHelper(args.annot_file, args.ques_file)
+helper = DataHelper(args.annot_file, args.ques_file) # from VQA
+tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
 if not os.path.exists(args.output_dir):
     os.makedirs(args.output_dir)
 
 output_file_path = os.path.join(args.output_dir, "vqa_dataset.txt")
-
+input_img_path = os.path.join(args.annot_file, "images/")
 # each line contains: image_filename[tab]question[tab]answer
 with open(output_file_path, "w") as output_file:
     for i in range(len(helper.dataset['annotations'])):
@@ -60,9 +61,16 @@ with open(output_file_path, "w") as output_file:
         ques_id = helper.dataset['annotations'][i]['question_id']
         question = helper.qqa[ques_id]['question']
 
-        # Convert to comma-separated token string
-        question = ','.join(question.strip().split())
+        # Convert to comma-separated token string (not with BERT)
+        # question = ','.join(question.strip().split())
 
         answer = helper.dataset['annotations'][i]['multiple_choice_answer']
 
-        output_file.write(img_name + "\t" + question + "\t" + answer + "\n")
+        text_2_bert = "[CLS] " + question + "[SEP] " + answer + " [SEP]"
+        tokenized_text = tokenizer.tokenize(text_2_bert)
+        tokenized_text = ",".join(tokenized_text)
+        if i % 3000 == 0:
+            print(tokenized_text)
+            print(os.path.join(input_img_path, img_name))
+            print("exists?", os.path.exists(os.path.join(input_img_path, img_name)))
+        output_file.write(img_name + "\t" + tokenized_text + "\n")

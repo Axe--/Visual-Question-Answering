@@ -5,29 +5,31 @@ from skimage.transform import resize
 from skimage.color import gray2rgb
 import numpy as np
 import os
-from utils import build_vocab, preprocess_text, pad_sequences
+from utils import preprocess_text, pad_sequences
 
 
 class VQADataset(Dataset):
     """VQA Dataset"""
 
-    def __init__(self, data, labels, img_dir, transform=None):
+    def __init__(self, data, label_to_idx, img_dir, max_seq_length, word_idx_dicts=None, transform=None):
         """
         :param data: filtered dataset samples ("img_name question answer")
-        :param labels: top K answer list
+        :param label_to_idx: answer labels to class index mapping  (for top K)
         :param img_dir: path to images directory
-        :param transform: image transform functions (data augmentation)
+        :param max_seq_length: length of the longest question (word sequence)
+        :param word_idx_dicts: word2idx & idx2word (common across train, validation & test sets)
+        :param transform: image transform functions (preprocessing + data augmentation)
         """
         self.data = data
         self.images_dir = img_dir
+        self.label_to_idx = label_to_idx
 
-        # Map labels to indexes
-        self.label_to_idx = {label: idx for idx, label in enumerate(labels)}
-        self.idx_to_label = {idx: label for idx, label in enumerate(labels)}
+        self.word2idx = word_idx_dicts['word2idx']
+        self.idx2word = word_idx_dicts['idx2word']
 
-        # Build question vocabulary -- word2idx & idx2word mappings
-        self.word2idx, self.idx2word, self.max_len_sequence = build_vocab(self.data)
+        self.max_sequence_length = max_seq_length
 
+        # Image transforms
         self.transform = transform
 
     def __len__(self):
@@ -39,12 +41,16 @@ class VQADataset(Dataset):
 
         img_path = os.path.join(self.images_dir, img_name)
 
+        # Read & Resize image
         image = resize(io.imread(img_path), [224, 224])
 
+        # If image doesn't have color channels, add dummy rgb (axis)
+        if len(image.shape) == 2:
+            image = gray2rgb(image)
+
         question = preprocess_text(question)
-        question = ['<START>'] + question + ['<END>']
         question = [self.word2idx[word] for word in question]
-        question = pad_sequences(question, self.max_len_sequence)
+        question = pad_sequences(question, self.max_sequence_length)
 
         # Actual length of the sequence (ignoring padded elements)
         # used later by pad_packed_sequence (torch.nn.utils.rnn)
@@ -52,25 +58,28 @@ class VQADataset(Dataset):
 
         label_idx = self.label_to_idx[answer]
 
+        if self.transform:
+            image = self.transform(image)
+
+        # Ensure that the image is float32; ToTensor() defaults to float64 (double)
+        image = image.float()
+
         # Collate for transforms
         img_ques_ans = {'image': image,
                         'question': question,
                         'ques_len': ques_len,
                         'label': label_idx}
 
-        if self.transform:
-            img_ques_ans = self.transform(img_ques_ans)
-
         return img_ques_ans
 
 
-def frequent_answers(file_path, K):
+def fetch_frequent_answers(file_path, K):
     """
     We treat answer tokens as class labels;
     the top K most frequent answers are selected
 
-    :param file_path: path to dataset file
-    :param K: num of labels
+    :param str file_path: path to dataset file
+    :param int K: num of labels
     :return: `K` most frequent answers
     :rtype: list
     """
@@ -128,18 +137,11 @@ def filter_samples_by_label(file_path, labels):
 class ToTensor(object):
     """Convert numpy arrays to Tensors"""
 
-    def __call__(self, sample):
-        img = sample['image']
-
-        # If image doesn't have color channels, add dummy rgb (axis)
-        if len(img.shape) == 2:
-            img = gray2rgb(img)
-
-        # swap color axis because -> numpy image: H x W x C  # torch image: C X H X W
+    def __call__(self, img):
+        # Swap color channel axis because -> numpy image: H x W x C  # torch image: C X H X W
         img = img.transpose((2, 0, 1))
-        sample['image'] = torch.FloatTensor(img)
 
-        return {'image': sample['image'],
-                'question': sample['question'],
-                'ques_len': sample['ques_len'],
-                'label': sample['label']}
+        img = torch.tensor(img, dtype=torch.float32)
+        # NOTE: The original transform.ToTensor() converts to float64
+
+        return img

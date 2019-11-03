@@ -129,9 +129,14 @@ Run the following script for training:
 ```bash
 $ python3 main.py --mode train --model_name sample_model --train_img /home/axe/Datasets/VQA_Dataset/train2014 \
 --train_file /home/axe/Datasets/VQA_Dataset/vqa_dataset.txt --val_file /home/axe/Projects/VQA_baseline/sample_data.txt \
---val_img /home/axe/Datasets/VQA_Dataset/train2014 --log_dir /home/axe/Projects/VQA_baseline/results_log \
---gpu_id 1 --num_epochs 50 --batch_size 16 --num_cls 1000
+--val_img /home/axe/Datasets/VQA_Dataset/train2014 --log_dir /home/axe/Projects/VQA_baseline/results_log --gpu_id 1 \
+--num_epochs 50 --batch_size 256 --num_cls 1000 --save_after 500 --log_interval 100 --expt_name demo_1000 --learning_rate 1e-4
 ```
+
+> *Note* : Setting num_cls = 2 is equivalent to 'yes/no' setup. (K = 2)
+For K > 2, it is an open-ended set.
+
+---
 
 
 > *TODO* : Add TensorBoardX support

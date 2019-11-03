@@ -56,10 +56,10 @@ def build_vocab(data):
     Given the VQA Dataset, builds vocabulary for the questions
 
     :param data: img_name \t question \t answer
-    :return: index2word & word2index
+    :return: index2word, word2index & max sequence length
     """
     vocab = set()
-    max_len_sequence = 0
+    max_sequence_length = 0
 
     # Build a set of unique words
     for sample in data:
@@ -72,22 +72,17 @@ def build_vocab(data):
         vocab = vocab.union(set(words))
 
         # Update the max length sequence in the dataset
-        if len(words) > max_len_sequence:
-            max_len_sequence = len(words)
+        if len(words) > max_sequence_length:
+            max_sequence_length = len(words)
 
     # Build word to index mapping
-    helper_tokens = {'<PAD>': 0, '<START>': 1, '<END>': 2}
+    helper_tokens = {'<PAD>': 0, '<UNKNOWN>': 1}
 
-    # TODO:: Add the <UNKNOWN> tag for unseen words (Needed to handle Validation & Test sets)
-
-    vocab = {word: idx + 3 for idx, word in enumerate(list(vocab)) if word not in helper_tokens}  # TODO: change +3 to 4
+    vocab = {word: idx + 2 for idx, word in enumerate(list(vocab))}
 
     word2idx = {**helper_tokens, **vocab}
 
     # Conversely index to word mapping
     idx2word = {idx: word for word, idx in word2idx.items()}
 
-    # Add +2 to the sequence length due to <START> & <END> helper tokens
-    max_len_sequence += 2
-
-    return word2idx, idx2word, max_len_sequence
+    return word2idx, idx2word, max_sequence_length

@@ -76,7 +76,10 @@ class ImageEncoder(nn.Module):
         :return: embedding tensor (batch, 1024)
         """
         # Encode Image: 224 x 224 --> 4096
-        x_img = self.vgg11_encoder(x_img)
+        with torch.no_grad():
+            # optional: use no_grad() at inference
+            x_img = self.vgg11_encoder(x_img)
+
         x_img = F.normalize(x_img, dim=1, p=2)
 
         # Compute Embedding
@@ -106,7 +109,8 @@ class QuestionEncoder(nn.Module):
         self.hidden = None
 
         # Question embedding layer (1024-dim)
-        self.embedding_layer = nn.Linear(in_features=enc_units, out_features=1024)
+        self.embedding_layer = nn.Sequential(nn.Linear(enc_units, 1024),
+                                             nn.Tanh())
 
     def forward(self, x, seq_lengths, device):
         """
@@ -128,15 +132,8 @@ class QuestionEncoder(nn.Module):
 
         self.hidden = self.initialize_hidden_state(device)
 
-        output = None
-        try:
-            # Fwd Pass
-            output, self.hidden = self.gru(x, self.hidden)
-
-        except RuntimeError:
-            print(x.shape)
-            print(self.hidden.shape)
-            print()
+        # Fwd Pass
+        output, self.hidden = self.gru(x, self.hidden)
 
         # Pad back (but to max-length of the mini-batch)
         output, _ = pad_packed_sequence(output)

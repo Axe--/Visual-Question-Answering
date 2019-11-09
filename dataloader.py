@@ -11,10 +11,10 @@ from utils import preprocess_text, pad_sequences
 class VQADataset(Dataset):
     """VQA Dataset"""
 
-    def __init__(self, data, label_to_idx, img_dir, max_seq_length, word_idx_dicts=None, transform=None):
+    def __init__(self, data, label2idx, img_dir, max_seq_length, word_idx_dicts=None, transform=None):
         """
         :param data: filtered dataset samples ("img_name question answer")
-        :param label_to_idx: answer labels to class index mapping  (for top K)
+        :param label2idx: answer labels to class index mapping  (for top K)
         :param img_dir: path to images directory
         :param max_seq_length: length of the longest question (word sequence)
         :param word_idx_dicts: word2idx & idx2word (common across train, validation & test sets)
@@ -22,7 +22,7 @@ class VQADataset(Dataset):
         """
         self.data = data
         self.images_dir = img_dir
-        self.label_to_idx = label_to_idx
+        self.label2idx = label2idx
 
         self.word2idx = word_idx_dicts['word2idx']
         self.idx2word = word_idx_dicts['idx2word']
@@ -56,7 +56,7 @@ class VQADataset(Dataset):
         # used later by pad_packed_sequence (torch.nn.utils.rnn)
         ques_len = sum(1 - np.equal(question, 0))
 
-        label_idx = self.label_to_idx[answer]
+        label_idx = self.label2idx[answer]
 
         if self.transform:
             image = self.transform(image)

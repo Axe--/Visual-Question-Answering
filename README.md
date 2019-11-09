@@ -10,6 +10,7 @@ Baseline VQA PyTorch implementation for Open-Ended Question-Answering
 - [Dataset](#dataset)
 - [Architecture](#architecture)
 - [Training](#training)
+- [Experiment Logs](#experiment-logs)
 - [References](#references)
 
 ---
@@ -34,7 +35,7 @@ $ python3 prepare_data.py --balanced_real_images
 -o /home/axe/Datasets/VQA_Dataset
 ```
 
-This command creates the <i> vqa_dataset.txt </i> file in the `-o` output directory.
+This creates the <i> vqa_dataset.txt </i> file in the output directory `-o`
 
 ---
 ## Architecture
@@ -62,32 +63,9 @@ VQABaselineNet(
       (0): Conv2d(3, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
       (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
       (2): ReLU(inplace=True)
-      (3): MaxPool2d(kernel_size=2, stride=2, padding=0, dilation=1, ceil_mode=False)
-      (4): Conv2d(64, 128, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-      (5): BatchNorm2d(128, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-      (6): ReLU(inplace=True)
-      (7): MaxPool2d(kernel_size=2, stride=2, padding=0, dilation=1, ceil_mode=False)
-      (8): Conv2d(128, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-      (9): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-      (10): ReLU(inplace=True)
-      (11): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-      (12): BatchNorm2d(256, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-      (13): ReLU(inplace=True)
-      (14): MaxPool2d(kernel_size=2, stride=2, padding=0, dilation=1, ceil_mode=False)
-      (15): Conv2d(256, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-      (16): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-      (17): ReLU(inplace=True)
-      (18): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-      (19): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-      (20): ReLU(inplace=True)
-      (21): MaxPool2d(kernel_size=2, stride=2, padding=0, dilation=1, ceil_mode=False)
-      (22): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-      (23): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-      (24): ReLU(inplace=True)
-      (25): Conv2d(512, 512, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-      (26): BatchNorm2d(512, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-      (27): ReLU(inplace=True)
-      (28): MaxPool2d(kernel_size=2, stride=2, padding=0, dilation=1, ceil_mode=False)
+      ...                                                   
+      # Max-pool (5x)
+      ...
       (29): AdaptiveAvgPool2d(output_size=(7, 7))
       (30): Flatten()
       (31): Linear(in_features=25088, out_features=4096, bias=True)
@@ -127,14 +105,45 @@ VQABaselineNet(
 Run the following script for training:
 
 ```bash
-$ python3 main.py --mode train --model_name sample_model --train_img /home/axe/Datasets/VQA_Dataset/train2014 \
---train_file /home/axe/Datasets/VQA_Dataset/vqa_dataset.txt --val_file /home/axe/Projects/VQA_baseline/sample_data.txt \
---val_img /home/axe/Datasets/VQA_Dataset/train2014 --log_dir /home/axe/Projects/VQA_baseline/results_log --gpu_id 1 \
---num_epochs 50 --batch_size 256 --num_cls 1000 --save_after 500 --log_interval 100 --expt_name demo_1000 --learning_rate 1e-4
+$ python3 main.py --mode train --expt_name expt_K_2_yes_no --expt_dir /home/axe/Projects/VQA_baseline/results_log \
+--train_img /home/axe/Datasets/VQA_Dataset/train2014 --train_file /home/axe/Datasets/VQA_Dataset/vqa_dataset.txt \
+--val_img /home/axe/Datasets/VQA_Dataset/train2014 --val_file /home/axe/Projects/VQA_baseline/sample_data.txt --gpu_id 0\
+ --num_epochs 50 --batch_size 128 --num_cls 2 --save_interval 1000 --log_interval 100 --run_name demo_run -lr 1e-4
+```
+Specify `--model_ckpt` (filename.pth) to load model checkpoint from disk <i>(resume training/inference)</i>
+
+> *Note*: Setting num_cls (K) = 2 is equivalent to 'yes/no' setup. <br>
+          For K > 2, it is an open-ended set.
+
+### Experiment Logs
+
+The experiment output log directory is structured as follows:
+
+```
+├── main.py
+..
+..
+├── expt_dir
+│   └── expt_name
+│       ├── vocab_K.pkl
+│       └── run_name
+│           ├── events.out.tfevents.1572463346.axe-H270-Gaming-3
+│           ├── model_4000.pth
+│           └── train_log.txt
+
 ```
 
-> *Note* : Setting num_cls = 2 is equivalent to 'yes/no' setup. (K = 2)
-For K > 2, it is an open-ended set.
+
+- **Option 1**
+    - 🍴 ..
+
+- **Option 2**
+    - 👯 ..
+
+### Step 
+
+- **....**
+
 
 ---
 
@@ -142,7 +151,7 @@ For K > 2, it is an open-ended set.
 > *TODO* : Add TensorBoardX support
 
 
-- [ ] TensorBoardX
+- [x] TensorBoardX
 - [ ] BERT Embeddings (huggingface)
 
 ---

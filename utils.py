@@ -7,8 +7,14 @@ import string
 import numpy as np
 
 
-# Padding a sequence, given max length
 def pad_sequences(seq, max_len):
+    """
+    Pads a sequence, given max length
+    :param seq: list (int tokens)
+    :param max_len: pad to max length
+    :return: list (padded sequence)
+    """
+
     padded = np.zeros((max_len,), np.int64)
     if len(seq) > max_len:
         padded[:] = seq[:max_len]
@@ -17,8 +23,15 @@ def pad_sequences(seq, max_len):
     return padded
 
 
-# Sort data (desc.) based on sequence lengths of batch sample (needed for pad_packed_sequence)
 def sort_batch(images, questions, answers, ques_seq_lens):
+    """
+    Sort data (desc.) based on sequence lengths of batch sample (needed for pad_packed_sequence)
+    :param images:
+    :param questions:
+    :param answers:
+    :param ques_seq_lens:
+    :return:
+    """
     # question --> (batch_size, sequence_length)
 
     ques_seq_lens, idx = ques_seq_lens.sort(dim=0, descending=True)

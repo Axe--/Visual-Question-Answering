@@ -10,7 +10,8 @@ Baseline VQA PyTorch implementation for Open-Ended Question-Answering
 - [Dataset](#dataset)
 - [Architecture](#architecture)
 - [Training](#training)
-- [Experiment Logs](#experiment-logs)
+- [Experiment Logging](#experiment-logging)
+- [Inference](#inference)
 - [References](#references)
 
 ---
@@ -29,13 +30,14 @@ annotations & questions file, generates a dataset file (.txt) in the following f
 Sample Execution:
 
 ```bash
-$ python3 prepare_data.py --balanced_real_images 
--a /home/axe/Datasets/VQA_Dataset/v2_mscoco_train2014_annotations.json 
--q /home/axe/Datasets/VQA_Dataset/v2_OpenEnded_mscoco_train2014_questions.json 
--o /home/axe/Datasets/VQA_Dataset
+$ python3 prepare_data.py --balanced_real_images \
+-a /home/axe/Datasets/VQA_Dataset/v2_mscoco_train2014_annotations.json \
+-q /home/axe/Datasets/VQA_Dataset/v2_OpenEnded_mscoco_train2014_questions.json \
+-o /home/axe/Datasets/VQA_Dataset \
+-fn vqa_train2014.txt
 ```
 
-This creates the <i> vqa_dataset.txt </i> file in the output directory `-o`
+Stores the file in the output directory `-o`
 
 ---
 ## Architecture
@@ -50,7 +52,7 @@ Question --> LSTM_encoder --> question_embedding <br>
 ![Alt text](vqa_baseline_architecture.png?raw=true "Baseline Architecture")
 
 <br>
-PyTorch Representation: 
+PyTorch Representation:
 
 > Image_Encoder() --> img_emb       <br>
   Question_Encoder() --> ques_emb   <br>
@@ -115,7 +117,7 @@ Specify `--model_ckpt` (filename.pth) to load model checkpoint from disk <i>(res
 > *Note*: Setting num_cls (K) = 2 is equivalent to 'yes/no' setup. <br>
           For K > 2, it is an open-ended set.
 
-### Experiment Logs
+### Experiment Logging
 
 The experiment output log directory is structured as follows:
 
@@ -140,7 +142,7 @@ The experiment output log directory is structured as follows:
 - **Option 2**
     - 👯 ..
 
-### Step 
+### Inference 
 
 - **....**
 
@@ -148,11 +150,11 @@ The experiment output log directory is structured as follows:
 ---
 
 
-> *TODO* : Add TensorBoardX support
+> *TODO*: Test with BERT embeddings (Pre-Trained & Fine-Tuned)
 
 
 - [x] TensorBoardX
-- [ ] BERT Embeddings (huggingface)
+- [ ] BERT Embeddings
 
 ---
 

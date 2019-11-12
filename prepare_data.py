@@ -1,9 +1,19 @@
 """
 Given the VQA annotations & questions file, generates a dataset file (.txt) in the following format:
 
-`image_name` \t `question` \t `answer`
+`image_name` <tab> `question` <tab> `answer`
 
-The resulting file vqa_dataset.txt is stored in the --output_dir
+* question & answer are comma-separated strings.
+
+The resulting file is stored in the --output_dir
+"""
+
+"""
+$ python3 prepare_data.py --balanced_real_images \
+-a /home/axe/Datasets/VQA_Dataset/v2_mscoco_train2014_annotations.json \
+-q /home/axe/Datasets/VQA_Dataset/v2_OpenEnded_mscoco_train2014_questions.json \
+-o /home/axe/Datasets/VQA_Dataset \
+-fn vqa_train2014.txt
 """
 
 import argparse
@@ -19,9 +29,10 @@ def pad_with_zero(num):
 
 parser = argparse.ArgumentParser(description='Prepare data for balanced real images QA aka COCO')
 
-parser.add_argument('-a', '--annot_file',   type=str, help='path to annotations file (.json)', required=True)
-parser.add_argument('-q', '--ques_file',    type=str, help='path to questions file (.json)', required=True)
-parser.add_argument('-o', '--output_dir',   type=str, help='stores vqa_dataset.txt (img, ques, ans)', required=True)
+parser.add_argument('-a',  '--annot_file',   type=str,   help='path to annotations file (.json)', required=True)
+parser.add_argument('-q',  '--ques_file',    type=str,   help='path to questions file (.json)', required=True)
+parser.add_argument('-o',  '--output_dir',   type=str,   help='output directory to store the file', required=True)
+parser.add_argument('-fn', '--file_name',    type=str,   help='output file name (img, ques, ans)', required=True)
 
 group = parser.add_mutually_exclusive_group()
 group.add_argument("--balanced_real_images", action="store_true",
@@ -48,7 +59,7 @@ helper = DataHelper(args.annot_file, args.ques_file)
 if not os.path.exists(args.output_dir):
     os.makedirs(args.output_dir)
 
-output_file_path = os.path.join(args.output_dir, "vqa_dataset.txt")
+output_file_path = os.path.join(args.output_dir, args.file_name)
 
 # each line contains: image_filename[tab]question[tab]answer
 with open(output_file_path, "w") as output_file:

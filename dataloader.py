@@ -1,32 +1,28 @@
 from torch.utils.data import Dataset
 import torch
-import skimage.io as io
-from skimage.transform import resize
-from skimage.color import gray2rgb
+from PIL import Image
 import numpy as np
 import os
+from time import time
 from utils import preprocess_text, pad_sequences
 
 
 class VQADataset(Dataset):
     """VQA Dataset"""
 
-    def __init__(self, data, label2idx, img_dir, max_seq_length, word_idx_dicts=None, transform=None):
+    def __init__(self, data, img_dir, label2idx, max_seq_length, word2idx, transform):
         """
-        :param data: filtered dataset samples ("img_name question answer")
+        :param data: list of filtered dataset samples ("img_name \t question \t answer")
         :param label2idx: answer labels to class index mapping  (for top K)
         :param img_dir: path to images directory
         :param max_seq_length: length of the longest question (word sequence)
-        :param word_idx_dicts: word2idx & idx2word (common across train, validation & test sets)
+        :param word2idx: word to index mapping (common across train, validation & test sets)
         :param transform: image transform functions (preprocessing + data augmentation)
         """
         self.data = data
         self.images_dir = img_dir
         self.label2idx = label2idx
-
-        self.word2idx = word_idx_dicts['word2idx']
-        self.idx2word = word_idx_dicts['idx2word']
-
+        self.word2idx = word2idx
         self.max_sequence_length = max_seq_length
 
         # Image transforms
@@ -36,17 +32,18 @@ class VQADataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
+        # st = time()
+
         # Parse the text file line
         img_name, question, answer = self.data[idx].strip().split('\t')
 
         img_path = os.path.join(self.images_dir, img_name)
+        image = Image.open(img_path).convert('RGB')
 
-        # Read & Resize image
-        image = resize(io.imread(img_path), [224, 224])
+        # Resize (224, 224); ToTensor(); Normalize(mean, std_dev)
+        image = self.transform(image)    # uint8 --> float32
 
-        # If image doesn't have color channels, add dummy rgb (axis)
-        if len(image.shape) == 2:
-            image = gray2rgb(image)
+        # print('Image Time {:.4f} secs'.format(time() - st))
 
         question = preprocess_text(question)
         question = [self.word2idx[word] for word in question]
@@ -58,17 +55,13 @@ class VQADataset(Dataset):
 
         label_idx = self.label2idx[answer]
 
-        if self.transform:
-            image = self.transform(image)
-
-        # Ensure that the image is float32; ToTensor() defaults to float64 (double)
-        image = image.float()
-
         # Collate for transforms
         img_ques_ans = {'image': image,
                         'question': question,
                         'ques_len': ques_len,
                         'label': label_idx}
+
+        # print('__getitem__() Time {:.4f} secs'.format(time() - st))
 
         return img_ques_ans
 
@@ -131,17 +124,3 @@ def filter_samples_by_label(file_path, labels):
             line = file_in.readline()
 
         return data
-
-
-# TODO:: Data Augmentation - Image Transformations
-class ToTensor(object):
-    """Convert numpy arrays to Tensors"""
-
-    def __call__(self, img):
-        # Swap color channel axis because -> numpy image: H x W x C  # torch image: C X H X W
-        img = img.transpose((2, 0, 1))
-
-        img = torch.tensor(img, dtype=torch.float32)
-        # NOTE: The original transform.ToTensor() converts to float64
-
-        return img

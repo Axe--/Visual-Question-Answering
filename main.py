@@ -3,13 +3,13 @@ import torch.nn as nn
 import argparse
 import os
 import sys
-import time
 import pickle
 import matplotlib.pyplot as plt
 import numpy as np
 import apex.amp as amp
+from time import time
 from torch.utils.data import DataLoader
-from torchvision.transforms import Compose, ToTensor, Normalize
+from torchvision.transforms import Compose, Resize, ToTensor, Normalize
 from tensorboardX import SummaryWriter
 from model import VQABaselineNet
 from utils import sort_batch, build_vocab
@@ -34,31 +34,34 @@ def main():
     parser = argparse.ArgumentParser(description='Visual Question Answering')
 
     # Experiment params
-    parser.add_argument('--mode',        type=str,  help='train or test', default=True)
-    parser.add_argument('--expt_dir',    type=str,  help='root directory to save model & summaries', required=True)
-    parser.add_argument('--expt_name',   type=str,  help='expt_dir/expt_name: organize experiments', required=True)
-    parser.add_argument('--run_name',    type=str,  help='expt_dir/expt_name/run_name: organize training runs', required=True)
+    parser.add_argument('--mode', type=str, help='train or test', default=True)
+    parser.add_argument('--expt_dir', type=str, help='root directory to save model & summaries', required=True)
+    parser.add_argument('--expt_name', type=str, help='expt_dir/expt_name: organize experiments', required=True)
+    parser.add_argument('--run_name', type=str, help='expt_dir/expt_name/run_name: organize training runs',
+                        required=True)
 
     # Data params
-    parser.add_argument('--train_img',   type=str,  help='path to training images directory', required=True)
-    parser.add_argument('--train_file',  type=str,  help='training dataset file', required=True)
-    parser.add_argument('--val_file',    type=str,  help='validation dataset file')
-    parser.add_argument('--val_img',     type=str,  help='path to validation images directory')
+    parser.add_argument('--train_img', type=str, help='path to training images directory', required=True)
+    parser.add_argument('--train_file', type=str, help='training dataset file', required=True)
+    parser.add_argument('--val_file', type=str, help='validation dataset file')
+    parser.add_argument('--val_img', type=str, help='path to validation images directory')
 
     # Vocab params
-    parser.add_argument('--num_cls',       '-K',   type=int_min_two,  help='top K answers (labels); min = 2', default=1000)
-    parser.add_argument('--skip_yes_no',   '-skp', type=str2bool,     help='exclude yes/no questions (class imbalance)', default='false')
+    parser.add_argument('--num_cls', '-K', type=int_min_two, help='top K answers (labels); min = 2', default=1000)
+    parser.add_argument('--skip_yes_no', '-skp', type=str2bool, help='exclude yes/no questions (class imbalance)',
+                        default='false')
 
     # Training params
-    parser.add_argument('--batch_size',    '-bs',  type=int,          help='batch size', default=8)
-    parser.add_argument('--num_epochs',    '-ep',  type=int,          help='number of epochs', default=50)
-    parser.add_argument('--learning_rate', '-lr',  type=float,        help='initial learning rate', default=1e-4)
-    parser.add_argument('--log_interval',          type=int,          help='interval size for logging training summaries', default=100)
-    parser.add_argument('--save_interval',         type=int,          help='save model after `n` weight update steps', default=3000)
+    parser.add_argument('--batch_size', '-bs', type=int, help='batch size', default=8)
+    parser.add_argument('--num_epochs', '-ep', type=int, help='number of epochs', default=50)
+    parser.add_argument('--learning_rate', '-lr', type=float, help='initial learning rate', default=1e-4)
+    parser.add_argument('--log_interval', type=int, help='interval size for logging training summaries', default=100)
+    parser.add_argument('--save_interval', type=int, help='save model after `n` weight update steps', default=3000)
 
     # Model params
-    parser.add_argument('--model_ckpt',       type=str,      help='resume training/perform inference; e.g. model_1000.pth')
-    parser.add_argument('--vgg_wts_path',     type=str,      help='VGG-11 (bn) pre-trained weights (.pth) file', default=PATH_VGG_WEIGHTS)
+    parser.add_argument('--model_ckpt', type=str, help='resume training/perform inference; e.g. model_1000.pth')
+    parser.add_argument('--vgg_wts_path', type=str, help='VGG-11 (bn) pre-trained weights (.pth) file',
+                        default=PATH_VGG_WEIGHTS)
     parser.add_argument('--is_vgg_trainable', type=str2bool, help='whether to train the VGG encoder', default='false')
     # parser.add_argument('--model_config', type=str, help='model config file - specifies model architecture')
 
@@ -105,10 +108,10 @@ def main():
 
         print('Training Log Directory: {}\n'.format(log_dir))
 
-        st = time.time()
+        st = time()
         # Build/Load vocab  -->  /expt_dir/expt_name/
         vocab = preprocess_vocab(args, train_data, labels)
-        print('\n ** Preprocessing time: {:.4f} secs.'.format(time.time() - st))
+        print('\n ** Preprocessing time: {:.4f} secs.'.format(time() - st))
 
         # Unpack vocab
         word2idx, idx2word, label2idx, idx2label, max_seq_length = [v for k, v in vocab.items()]
@@ -122,9 +125,10 @@ def main():
         word_idx_dicts = {'word2idx': word2idx, 'idx2word': idx2word}
 
         # Dataset & Dataloader
-        train_dataset = VQADataset(train_data, label2idx, args.train_img, max_seq_length, word_idx_dicts,
-                                   transform=Compose([ToTensor(), Normalize((0.485, 0.456, 0.406),
-                                                                            (0.229, 0.224, 0.225))]))
+        train_dataset = VQADataset(train_data, args.train_img, label2idx, max_seq_length, word2idx,
+                                   transform=Compose([Resize((224, 224)), ToTensor(), Normalize((0.485, 0.456, 0.406),
+                                                                                                (0.229, 0.224, 0.225))]))
+        # TODO: Data Augmentation - Image Transformations
 
         train_loader = torch.utils.data.DataLoader(train_dataset, batch_size, shuffle=True, drop_last=True)
 
@@ -133,7 +137,7 @@ def main():
         print('Train Data Size: {}'.format(train_dataset.__len__()))
 
         # Plot data (image, question, answer) for sanity check
-        # plot_data(train_loader, word_idx_dicts['idx2word'], idx_to_label, num_plots=10)
+        # plot_data(train_loader, idx2word, idx2label, num_plots=80)
         # sys.exit()
 
         if args.val_file:
@@ -141,9 +145,9 @@ def main():
             val_data = filter_samples_by_label(args.val_file, labels)
 
             # Use the same word-index dicts as that obtained for the training set
-            val_dataset = VQADataset(val_data, label2idx, args.val_img, max_seq_length, word_idx_dicts,
-                                     transform=Compose([ToTensor(), Normalize((0.485, 0.456, 0.406),
-                                                                              (0.229, 0.224, 0.225))]))
+            val_dataset = VQADataset(val_data, args.val_img, label2idx, max_seq_length, word2idx,
+                                     transform=Compose([Resize((224, 224)), ToTensor(), Normalize((0.485, 0.456, 0.406),
+                                                                                                  (0.229, 0.224, 0.225))]))
 
             val_loader = torch.utils.data.DataLoader(val_dataset, batch_size, shuffle=False, drop_last=True)
             print('Validation Data Size: {}'.format(val_dataset.__len__()))
@@ -157,8 +161,8 @@ def main():
                                    'enc_units': encoder_hidden_units, 'batch_size': batch_size}
 
         # Image Encoder params
-        is_vgg_trainable = args.is_vgg_trainable        # default = False
-        vgg_wts_path = args.vgg_wts_path                # default = PATH_VGG_WTS
+        is_vgg_trainable = args.is_vgg_trainable  # default = False
+        vgg_wts_path = args.vgg_wts_path  # default = PATH_VGG_WTS
 
         image_encoder_params = {'is_trainable': is_vgg_trainable, 'weights_path': vgg_wts_path}
 
@@ -166,7 +170,6 @@ def main():
         model = VQABaselineNet(question_encoder_params, image_encoder_params, K=args.num_cls)
         model.to(device)
 
-        # TODO: Add save & restore for models & corresponding params (word_idx, labels, etc.)
         # Load model checkpoint file (if specified) from `log_dir`
         if args.model_ckpt:
             model_ckpt_path = os.path.join(log_dir, args.model_ckpt)
@@ -191,9 +194,9 @@ def main():
         # model, optimizer = amp.initialize(model, optimizer, opt_level="O1")
 
         steps_per_epoch = len(train_loader)
-        start_time = time.time()
+        start_time = time()
         curr_step = 0
-        # TODO: Save model with best validation accuracy (cond: >= training accuracy)
+        # TODO: Save model with best validation accuracy
         best_val_acc = 0.0
 
         for epoch in range(n_epochs):
@@ -257,13 +260,13 @@ def main():
                     writer.add_scalar('Train/Loss', loss.item(), curr_step)
 
                     # Compute elapsed & remaining time for training to complete
-                    time_elapsed = (time.time() - start_time) / 3600
+                    time_elapsed = (time() - start_time) / 3600
                     # total time = time_per_step * steps_per_epoch * total_epochs
                     total_time = (time_elapsed / curr_step) * steps_per_epoch * n_epochs
                     time_left = total_time - time_elapsed
 
                     log_msg = 'Epoch [{}/{}], Step [{}/{}], Loss: {:.4f} | time elapsed: {:.2f}h | time left: {:.2f}h'.format(
-                            epoch + 1, n_epochs, curr_step + 1, steps_per_epoch, loss.item(), time_elapsed, time_left)
+                        epoch + 1, n_epochs, curr_step + 1, steps_per_epoch, loss.item(), time_elapsed, time_left)
 
                     log_file.write(log_msg + '\n')
                     log_file.flush()
@@ -284,11 +287,8 @@ def main():
     # Test
     """
     elif args.mode == 'test':
-        test_dataset = VQADataset(val_data, label_to_idx, args.val_img, max_sequence_length, word_idx_dicts, 
-                                                                            Compose([ToTensor(), 
-                                                                            Normalize((0.485, 0.456, 0.406), 
-                                                                                      (0.229, 0.224, 0.225))]))
-                              
+        test_dataset = VQADataset(????)
+
         test_loader = torch.utils.data.DataLoader(val_dataset, batch_size, shuffle=False, drop_last=True)
 
         checkpoint = torch.load(args.model_ckpt_file)
@@ -466,22 +466,27 @@ def plot_data(dataloader, idx2word, idx2label, num_plots=4):
     Helper for sanity check.
     """
     for i, data in enumerate(dataloader):
-        # Read dataset, select one random sample from the mini-batch
-        idx = np.random.choice(len(data))
+        st = time()
 
+        # Read dataset, select one random sample from the mini-batch
+        batch_size = len(data['label'])
+        idx = np.random.choice(batch_size)
         ques = data['question'][idx]
         label = data['label'][idx]
         img = data['image'][idx]
+        print('Fetch Time {:.4f} secs'.format(time() - st))
 
         # Convert question tokens to words & answer class index to label
         ques_str = ' '.join([idx2word[word_idx] for word_idx in ques.tolist()])
         ans_str = ' '.join(idx2label[label.tolist()])
 
+        st = time()
         # Plot Data
         plt.imshow(img.permute(1, 2, 0))
         plt.text(0, 0, ques_str, bbox=dict(fill=True, facecolor='white', edgecolor='red', linewidth=2))
         plt.text(220, 220, ans_str, bbox=dict(fill=True, facecolor='white', edgecolor='blue', linewidth=2))
         plt.show()
+        print('Plot Time {:.4f} secs'.format(time() - st))
 
         i += 1
 

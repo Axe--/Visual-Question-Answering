@@ -34,40 +34,38 @@ def main():
     parser = argparse.ArgumentParser(description='Visual Question Answering')
 
     # Experiment params
-    parser.add_argument('--mode', type=str, help='train or test', default=True)
-    parser.add_argument('--expt_dir', type=str, help='root directory to save model & summaries', required=True)
-    parser.add_argument('--expt_name', type=str, help='expt_dir/expt_name: organize experiments', required=True)
-    parser.add_argument('--run_name', type=str, help='expt_dir/expt_name/run_name: organize training runs',
-                        required=True)
+    parser.add_argument('--mode',       type=str,   help='train or test', default=True)
+    parser.add_argument('--expt_dir',   type=str,   help='root directory to save model & summaries', required=True)
+    parser.add_argument('--expt_name',  type=str,   help='expt_dir/expt_name: organize experiments', required=True)
+    parser.add_argument('--run_name',   type=str,   help='expt_dir/expt_name/run_name: organize training runs', required=True)
+    parser.add_argument('--val_size',   type=int,   help='validation set size for evaluating accuracy', default=10000)
 
     # Data params
-    parser.add_argument('--train_img', type=str, help='path to training images directory', required=True)
-    parser.add_argument('--train_file', type=str, help='training dataset file', required=True)
-    parser.add_argument('--val_file', type=str, help='validation dataset file')
-    parser.add_argument('--val_img', type=str, help='path to validation images directory')
+    parser.add_argument('--train_img',  type=str,   help='path to training images directory', required=True)
+    parser.add_argument('--train_file', type=str,   help='training dataset file', required=True)
+    parser.add_argument('--val_file',   type=str,   help='validation dataset file')
+    parser.add_argument('--val_img',    type=str,   help='path to validation images directory')
 
     # Vocab params
-    parser.add_argument('--num_cls', '-K', type=int_min_two, help='top K answers (labels); min = 2', default=1000)
-    parser.add_argument('--skip_yes_no', '-skp', type=str2bool, help='exclude yes/no questions (class imbalance)',
-                        default='false')
+    parser.add_argument('--num_cls',       '-K',    type=int_min_two, help='top K answers (labels); min = 2', default=1000)
+    parser.add_argument('--skip_yes_no',   '-skp',  type=str2bool,    help='exclude yes/no questions (class imbalance)', default='false')
 
     # Training params
-    parser.add_argument('--batch_size', '-bs', type=int, help='batch size', default=8)
-    parser.add_argument('--num_epochs', '-ep', type=int, help='number of epochs', default=50)
-    parser.add_argument('--learning_rate', '-lr', type=float, help='initial learning rate', default=1e-4)
-    parser.add_argument('--log_interval', type=int, help='interval size for logging training summaries', default=100)
-    parser.add_argument('--save_interval', type=int, help='save model after `n` weight update steps', default=3000)
+    parser.add_argument('--batch_size',    '-bs',   type=int,   help='batch size', default=8)
+    parser.add_argument('--num_epochs',    '-ep',   type=int,   help='number of epochs', default=50)
+    parser.add_argument('--learning_rate', '-lr',   type=float, help='initial learning rate', default=1e-4)
+    parser.add_argument('--log_interval',           type=int,   help='interval size for logging training summaries', default=100)
+    parser.add_argument('--save_interval',          type=int,   help='save model after `n` weight update steps', default=3000)
 
     # Model params
-    parser.add_argument('--model_ckpt', type=str, help='resume training/perform inference; e.g. model_1000.pth')
-    parser.add_argument('--vgg_wts_path', type=str, help='VGG-11 (bn) pre-trained weights (.pth) file',
-                        default=PATH_VGG_WEIGHTS)
-    parser.add_argument('--is_vgg_trainable', type=str2bool, help='whether to train the VGG encoder', default='false')
+    parser.add_argument('--model_ckpt',       type=str,       help='resume training/perform inference; e.g. model_1000.pth')
+    parser.add_argument('--vgg_wts_path',     type=str,       help='VGG-11 (bn) pre-trained weights (.pth) file', default=PATH_VGG_WEIGHTS)
+    parser.add_argument('--is_vgg_trainable', type=str2bool,  help='whether to train the VGG encoder', default='false')
     # parser.add_argument('--model_config', type=str, help='model config file - specifies model architecture')
 
     # GPU params
-    parser.add_argument('--num_gpus', type=int, help='number of GPUs to use for training', default=1)
-    parser.add_argument('--gpu_id', type=int, help='cuda:gpu_id (0,1,2,..) if num_gpus = 1', default=1)
+    parser.add_argument('--num_gpus',   type=int,   help='number of GPUs to use for training', default=1)
+    parser.add_argument('--gpu_id',     type=int,   help='cuda:gpu_id (0,1,2,..) if num_gpus = 1', default=0)
 
     args = parser.parse_args()
 
@@ -122,10 +120,8 @@ def main():
         # Train log file
         log_file = setup_logs_file(parser, log_dir)
 
-        word_idx_dicts = {'word2idx': word2idx, 'idx2word': idx2word}
-
         # Dataset & Dataloader
-        train_dataset = VQADataset(train_data, args.train_img, label2idx, max_seq_length, word2idx,
+        train_dataset = VQADataset(train_data, args.train_img, word2idx, label2idx, max_seq_length,
                                    transform=Compose([Resize((224, 224)), ToTensor(), Normalize((0.485, 0.456, 0.406),
                                                                                                 (0.229, 0.224, 0.225))]))
         # TODO: Data Augmentation - Image Transformations
@@ -145,12 +141,13 @@ def main():
             val_data = filter_samples_by_label(args.val_file, labels)
 
             # Use the same word-index dicts as that obtained for the training set
-            val_dataset = VQADataset(val_data, args.val_img, label2idx, max_seq_length, word2idx,
+            val_dataset = VQADataset(val_data, args.val_img, word2idx, label2idx, max_seq_length,
                                      transform=Compose([Resize((224, 224)), ToTensor(), Normalize((0.485, 0.456, 0.406),
                                                                                                   (0.229, 0.224, 0.225))]))
 
             val_loader = torch.utils.data.DataLoader(val_dataset, batch_size, shuffle=False, drop_last=True)
             print('Validation Data Size: {}'.format(val_dataset.__len__()))
+            print('Accuracy on the validation set is computed using {} samples. See --val_size\n'.format(args.val_size))
 
         # Question Encoder params
         vocabulary_size = len(train_dataset.word2idx.keys())
@@ -238,7 +235,7 @@ def main():
                 if (curr_step + 1) % args.log_interval == 0 or curr_step == 1:
                     # Validation set accuracy
                     if args.val_file:
-                        validation_accuracy = compute_accuracy(model, val_loader, device)
+                        validation_accuracy = compute_accuracy(model, val_loader, device, size=args.val_size)
 
                         log_msg = 'Validation Accuracy: {:.2f} %'.format(validation_accuracy)
 
@@ -322,13 +319,14 @@ def main():
     """
 
 
-def compute_accuracy(model, dataloader, device):
+def compute_accuracy(model, dataloader, device, size):
     """
     For the given model, computes accuracy on validation/test set
 
     :param model: VQA model
     :param dataloader: validation/test set dataloader
     :param device: cuda/cpu device where the model resides
+    :param size: no. of samples (subset) to compute accuracy
     :return: None
     """
     model.eval()
@@ -336,8 +334,10 @@ def compute_accuracy(model, dataloader, device):
         num_correct = 0
         total = 0
 
+        n_iters = size // dataloader.batch_size
+
         # Evaluate on mini-batches
-        for batch in dataloader:
+        for i, batch in enumerate(dataloader):
             # Load batch data
             image = batch['image']
             question = batch['question']
@@ -365,6 +365,9 @@ def compute_accuracy(model, dataloader, device):
 
             num_correct += correct.sum().item()
             total += len(label)
+
+            if i >= n_iters:
+                break
 
         accuracy = 100.0 * num_correct / total
 

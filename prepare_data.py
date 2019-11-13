@@ -13,7 +13,13 @@ $ python3 prepare_data.py --balanced_real_images \
 -a /home/axe/Datasets/VQA_Dataset/v2_mscoco_train2014_annotations.json \
 -q /home/axe/Datasets/VQA_Dataset/v2_OpenEnded_mscoco_train2014_questions.json \
 -o /home/axe/Datasets/VQA_Dataset \
--fn vqa_train2014.txt
+-s train -fn vqa_train2014.txt
+"""
+
+"""
+python3 prepare_data.py --balanced_real_images -a /home/axe/Datasets/VQA_Dataset/v2_mscoco_val2014_annotations.json 
+-q /home/axe/Datasets/VQA_Dataset/v2_OpenEnded_mscoco_val2014_questions.json -o /home/axe/Datasets/VQA_Dataset 
+-s val -fn vqa_val2014.txt
 """
 
 import argparse
@@ -29,6 +35,7 @@ def pad_with_zero(num):
 
 parser = argparse.ArgumentParser(description='Prepare data for balanced real images QA aka COCO')
 
+parser.add_argument('-s',  '--split',        type=str,   help='split set', required=True, choices=['train', 'val'])
 parser.add_argument('-a',  '--annot_file',   type=str,   help='path to annotations file (.json)', required=True)
 parser.add_argument('-q',  '--ques_file',    type=str,   help='path to questions file (.json)', required=True)
 parser.add_argument('-o',  '--output_dir',   type=str,   help='output directory to store the file', required=True)
@@ -48,10 +55,18 @@ image_prefix = ""
 image_postfix = ""
 assert (args.balanced_real_images != args.abstract_scene_images)
 if args.balanced_real_images:
-    image_prefix += "COCO_train2014_000000"
+    if args.split == 'train':
+        image_prefix = "COCO_train2014_000000"
+    else:
+        image_prefix = "COCO_val2014_000000"
     image_postfix = ".jpg"
+
 elif args.abstract_scene_images:
-    image_prefix += "abstract_v002_train2015_0000000"
+    if args.split == 'train':
+        image_prefix = "abstract_v002_train2015_0000000"
+    else:
+        raise NotImplementedError()
+
     image_postfix = ".png"
 
 helper = DataHelper(args.annot_file, args.ques_file)

@@ -47,7 +47,7 @@ def preprocess_text(text):
     Given comma-separated text, removes punctuations & converts to lowercase.
 
     :param text: string of comma-separated words (sentence)
-    :return: array of tokens
+    :return: list of preprocessed word tokens
     """
     # Comma-separated word tokens
     text_token_list = text.strip().split(',')

@@ -10,13 +10,16 @@ from utils import preprocess_text, pad_sequences
 class VQADataset(Dataset):
     """VQA Dataset"""
 
-    def __init__(self, data, img_dir, label2idx, max_seq_length, word2idx, transform):
+    def __init__(self, data, img_dir, word2idx, label2idx, max_seq_length, transform):
         """
-        :param data: list of filtered dataset samples ("img_name \t question \t answer")
-        :param label2idx: answer labels to class index mapping  (for top K)
-        :param img_dir: path to images directory
-        :param max_seq_length: length of the longest question (word sequence)
-        :param word2idx: word to index mapping (common across train, validation & test sets)
+        The params - `word2idx`, `label2idx`, `max_seq_length` are
+        common across train, validation & test sets.
+
+        :param list data: filtered dataset samples ("img_name \t question \t answer")
+        :param str img_dir: path to images directory
+        :param dict word2idx: word to index mapping
+        :param dict label2idx: answer labels to class index mapping  (for top K)
+        :param int max_seq_length: length of the longest question (word sequence)
         :param transform: image transform functions (preprocessing + data augmentation)
         """
         self.data = data
@@ -46,7 +49,8 @@ class VQADataset(Dataset):
         # print('Image Time {:.4f} secs'.format(time() - st))
 
         question = preprocess_text(question)
-        question = [self.word2idx[word] for word in question]
+        # skip words not in training set's vocab
+        question = [self.word2idx[word] for word in question if word in self.word2idx]
         question = pad_sequences(question, self.max_sequence_length)
 
         # Actual length of the sequence (ignoring padded elements)
@@ -62,7 +66,6 @@ class VQADataset(Dataset):
                         'label': label_idx}
 
         # print('__getitem__() Time {:.4f} secs'.format(time() - st))
-
         return img_ques_ans
 
 

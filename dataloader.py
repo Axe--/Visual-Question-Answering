@@ -3,26 +3,28 @@ import torch
 from PIL import Image
 import numpy as np
 import os
-from time import time
 from utils import preprocess_text, pad_sequences
 
 
 class VQADataset(Dataset):
     """VQA Dataset"""
 
-    def __init__(self, data, img_dir, word2idx, label2idx, max_seq_length, transform):
+    def __init__(self, data_file, img_dir, word2idx, label2idx, max_seq_length, transform):
         """
         The params - `word2idx`, `label2idx`, `max_seq_length` are
         common across train, validation & test sets.
 
-        :param list data: filtered dataset samples ("img_name \t question \t answer")
+        Dataset file contains samples in the following format:
+        `img_name \t question \t answer`
+
+        :param data_file: dataset file path
         :param str img_dir: path to images directory
         :param dict word2idx: word to index mapping
         :param dict label2idx: answer labels to class index mapping  (for top K)
         :param int max_seq_length: length of the longest question (word sequence)
         :param transform: image transform functions (preprocessing + data augmentation)
         """
-        self.data = data
+        self.data_file = data_file
         self.images_dir = img_dir
         self.label2idx = label2idx
         self.word2idx = word2idx
@@ -31,99 +33,42 @@ class VQADataset(Dataset):
         # Image transforms
         self.transform = transform
 
+        # Read dataset file
+        with open(self.data_file, 'r') as f:
+            self.data = f.read().strip().split('\n')
+
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, idx):
-        # st = time()
-
         # Parse the text file line
         img_name, question, answer = self.data[idx].strip().split('\t')
 
         img_path = os.path.join(self.images_dir, img_name)
         image = Image.open(img_path).convert('RGB')
 
-        # Resize (224, 224); ToTensor(); Normalize(mean, std_dev)
+        # Resize(224, 224); ToTensor(); Normalize(mean, std_dev)
         image = self.transform(image)    # uint8 --> float32
 
-        # print('Image Time {:.4f} secs'.format(time() - st))
-
+        # Preprocess question (str --> list)
         question = preprocess_text(question)
-        # skip words not in training set's vocab
-        question = [self.word2idx[word] for word in question if word in self.word2idx]
+
+        # Convert caption words to indexes
+        # Map words not in the training set's vocab to <UNKNOWN>
+        question = [self.word2idx[word] if word in self.word2idx else self.word2idx['<UNKNOWN>'] for word in question]
+
+        # Pad question to max sequence length
         question = pad_sequences(question, self.max_sequence_length)
 
         # Actual length of the sequence (ignoring padded elements)
         # used later by pad_packed_sequence (torch.nn.utils.rnn)
         ques_len = sum(1 - np.equal(question, 0))
 
-        label_idx = self.label2idx[answer]
+        # Convert answer to label index
+        # If current answer is not in the answer vocab, replace it with the `UNKNOWN` label
+        label_idx = self.label2idx[answer if answer in self.label2idx else 'UNKNOWN']
 
         # Collate for transforms
-        img_ques_ans = {'image': image,
-                        'question': question,
-                        'ques_len': ques_len,
-                        'label': label_idx}
+        img_ques_ans = {'image': image, 'question': question, 'ques_len': ques_len, 'label': label_idx}
 
-        # print('__getitem__() Time {:.4f} secs'.format(time() - st))
         return img_ques_ans
-
-
-def fetch_frequent_answers(file_path, K):
-    """
-    We treat answer tokens as class labels;
-    the top K most frequent answers are selected
-
-    :param str file_path: path to dataset file
-    :param int K: num of labels
-    :return: `K` most frequent answers
-    :rtype: list
-    """
-    with open(file_path, 'r') as file_in:
-        answer_frequency_dict = {}
-
-        line = file_in.readline()
-
-        while line:
-            answer = line.strip().split('\t')[2]
-
-            if answer in answer_frequency_dict:
-                answer_frequency_dict[answer] += 1
-            else:
-                answer_frequency_dict[answer] = 1
-
-            line = file_in.readline()
-
-        top_k_answers = sorted(answer_frequency_dict.items(), reverse=True, key=lambda kv: kv[1])[:K]
-        top_k_answers = [ans for ans, cnt in top_k_answers]
-
-        return top_k_answers
-
-
-def filter_samples_by_label(file_path, labels):
-    """
-    Filters out samples that don't contain answers in the labels list
-
-    :param file_path: path to dataset file
-    :param labels: answer labels
-    :type labels: list
-
-    :return: filtered list of samples from the data file
-    """
-    # Convert to HashSet: O(1) lookup
-    labels = set(labels)
-
-    with open(file_path, 'r') as file_in:
-        data = []
-
-        line = file_in.readline()
-
-        while line:
-            answer = line.strip().split('\t')[2]
-
-            if answer in labels:
-                data.append(line)
-
-            line = file_in.readline()
-
-        return data

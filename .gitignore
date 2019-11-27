@@ -1,10 +1,15 @@
 results*
 .DS_Store
 log*
-*machine_translation*
 *.jpg
 *.png
 *.json
 *.pickle
+*del*.py
 .ipynb_checkpoints*
+*sample_data*.txt
+*sample.md
 .DS_Store
+*delete*
+*pycache*
+*notes*txt

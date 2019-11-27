@@ -30,14 +30,16 @@ annotations & questions file, generates a dataset file (.txt) in the following f
 Sample Execution:
 
 ```bash
-$ python3 prepare_data.py --balanced_real_images \
--a /home/axe/Datasets/VQA_Dataset/v2_mscoco_train2014_annotations.json \
--q /home/axe/Datasets/VQA_Dataset/v2_OpenEnded_mscoco_train2014_questions.json \
--o /home/axe/Datasets/VQA_Dataset \
--fn vqa_train2014.txt
+$ python3 prepare_data.py --balanced_real_images -s train \
+-a /home/axe/Datasets/VQA_Dataset/raw/v2_mscoco_train2014_annotations.json \
+-q /home/axe/Datasets/VQA_Dataset/raw/v2_OpenEnded_mscoco_train2014_questions.json \
+-o /home/axe/Datasets/VQA_Dataset/processed/vqa_train2014.txt \
+-v /home/axe/Datasets/VQA_Dataset/processed/vocab_count_5_K_1000.pickle -c 5 -K 1000  # vocab flags (for training set)
 ```
 
-Stores the file in the output directory `-o`
+Stores the dataset file in the output directory `-o` and the corresponding vocab file `-v`. <br>
+For validation/test sets, remove the vocabulary flags: `-v`, `-c`, `-K`.
+
 
 ---
 ## Architecture
@@ -107,10 +109,12 @@ VQABaselineNet(
 Run the following script for training:
 
 ```bash
-$ python3 main.py --mode train --expt_name expt_K_2_yes_no --expt_dir /home/axe/Projects/VQA_baseline/results_log \
---train_img /home/axe/Datasets/VQA_Dataset/train2014 --train_file /home/axe/Datasets/VQA_Dataset/vqa_dataset.txt \
---val_img /home/axe/Datasets/VQA_Dataset/train2014 --val_file /home/axe/Projects/VQA_baseline/sample_data.txt --gpu_id 0\
- --num_epochs 50 --batch_size 128 --num_cls 2 --save_interval 1000 --log_interval 100 --run_name demo_run -lr 1e-4
+$ python3 main.py --mode train --expt_name K_1000  --expt_dir /home/axe/Projects/VQA_baseline/results_log \
+--train_img /home/axe/Datasets/VQA_Dataset/train2014 --train_file /home/axe/Datasets/VQA_Dataset/vqa_train2014.txt \
+--val_img /home/axe/Datasets/VQA_Dataset/val2014 --val_file /home/axe/Datasets/VQA_Dataset/vqa_val2014.txt \
+--gpu_id 0 --num_epochs 50 --batch_size 256 --num_cls 1000 --save_interval 1000 --log_interval 100 \
+--run_name demo_run -lr 1e-4 --opt_lvl 1 --num_workers 2
+
 ```
 Specify `--model_ckpt` (filename.pth) to load model checkpoint from disk <i>(resume training/inference)</i>
 

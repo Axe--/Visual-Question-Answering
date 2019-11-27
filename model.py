@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+from collections import OrderedDict
 
 
 class VQABaselineNet(nn.Module):
@@ -58,6 +59,7 @@ class ImageEncoder(nn.Module):
 
         # VGG Encoder: 224 x 224 ---[pool 5x]---> 7 x 7  ---[FC + L2_norm]---> 4096-dim
         self.vgg11_encoder = nn.Sequential(*vgg_layers)
+        # TODO: CALL self.build_vgg_encoder()
 
         # Image embedding layer (1024-dim)
         self.embedding_layer = nn.Sequential(nn.Linear(4096, 1024),
@@ -86,6 +88,41 @@ class ImageEncoder(nn.Module):
         x_emb = self.embedding_layer(x_img)
 
         return x_emb
+
+    def build_vgg_encoder(self):
+        """
+        Given VGG model, builds the encoder network for either of the two cases:
+            1. **With Attention**: only layers upto max_pool4 (vgg.features[:22])
+            2. **Without Attention**: all VGG layers except for the final classification layer
+        :return: model (nn.Module)
+        """
+        # If VGG weights file is given, set pretrained=False (to avoid duplicate download to .cache)
+        vgg11 = models.vgg11_bn(pretrained=not self.weights_path)
+
+        # Load Pre-Trained VGG_11 from disk, if weights file (.pth) is specified
+        if self.weights_path:
+            vgg11.load_state_dict(torch.load(self.weights_path))
+
+        # Incorporate VGG layers
+        if self.with_attention:
+            # use image encoder for attention-decoder
+            vgg_encoder = nn.Sequential(*list(vgg11.features)[:22])
+
+        else:
+            # Select all VGG layers (excluding the final FC-1000)
+            fc_layers = nn.Sequential(nn.Flatten(), *list(vgg11.classifier)[:-1])
+
+            # VGG Encoder: 224x224 ---[pool 5x]---> 7x7  ---[FC + L2_norm]---> 4096-dim
+            vgg_encoder = nn.Sequential(OrderedDict([('conv_layers', vgg11.features),
+                                                     ('avgpool', vgg11.avgpool),
+                                                     ('fc_layers', fc_layers)]))
+
+        # Freeze the VGG Encoder layers (is_trainable == False)
+        if not self.is_trainable:
+            for param in vgg_encoder.parameters():
+                param.requires_grad = False
+
+        return vgg_encoder
 
 
 class QuestionEncoder(nn.Module):

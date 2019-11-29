@@ -11,6 +11,9 @@ import os
 import errno
 import matplotlib.pyplot as plt
 
+# Pre-trained VGG-11 weights
+PATH_VGG_WEIGHTS = '/home/axe/Projects/Pre_Trained_Models/vgg11_bn-6002323d.pth'
+
 
 def pad_sequences(seq, max_len):
     """

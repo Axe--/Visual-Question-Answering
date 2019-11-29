@@ -1,8 +1,6 @@
 results*
 .DS_Store
 log*
-*.jpg
-*.png
 *.json
 *.pickle
 *del*.py

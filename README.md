@@ -1,6 +1,7 @@
 # VQA Baseline
-Baseline VQA PyTorch implementation for Open-Ended Question-Answering
-
+VQA PyTorch implementations for Open-Ended Question-Answering
+- [Baseline <i>(LSTM Q + I)</i>](#references)
+- [Hierarchical Co-Attention <i>(Parallel)</i>](#references) 
 
 
 ---
@@ -51,7 +52,7 @@ Question --> LSTM_encoder --> question_embedding <br>
 
 (image_embedding * question_embedding) --> FC --> Softmax --> answer_probability
 
-![Alt text](vqa_baseline_architecture.png?raw=true "Baseline Architecture")
+![Alt text](assets/vqa_baseline_architecture.png?raw=true "Baseline Architecture")
 
 <br>
 PyTorch Representation:
@@ -158,9 +159,10 @@ The experiment output log directory is structured as follows:
 
 
 - [x] TensorBoardX
-- [ ] BERT Embeddings
+- [ ] VQA w/ BERT
 
 ---
 
 ## References
-[1]  [VQA: Visual Question Answering](https://arxiv.org/pdf/1505.00468)
+[1]  [VQA: Visual Question Answering](https://arxiv.org/pdf/1505.00468) <br>
+[2]  [Hierarchical Question-Image Co-Attention for Visual Question Answering](https://arxiv.org/pdf/1606.00061)

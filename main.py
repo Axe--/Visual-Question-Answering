@@ -17,6 +17,7 @@ from dataloader import VQADataset
 from torch.optim.lr_scheduler import StepLR
 from utils import sort_batch, load_vocab
 from utils import str2bool, int_min_two, plot_data, print_and_log
+from utils import PATH_VGG_WEIGHTS
 
 """
 Train (with validation):
@@ -28,8 +29,6 @@ python3 main.py --mode train --expt_name sample_model_K_2_yes_no --expt_dir /hom
 Test:
 """
 
-PATH_VGG_WEIGHTS = '/home/axe/Projects/Pre_Trained_Models/vgg11_bn-6002323d.pth'
-
 
 def main():
     parser = argparse.ArgumentParser(description='Visual Question Answering')
@@ -39,6 +38,7 @@ def main():
     parser.add_argument('--expt_dir',      type=str,            help='root directory to save model & summaries', required=True)
     parser.add_argument('--expt_name',     type=str,            help='expt_dir/expt_name: organize experiments', required=True)
     parser.add_argument('--run_name',      type=str,            help='expt_dir/expt_name/run_name: organize training runs', required=True)
+    parser.add_argument('--model_type',    type=str,            help='VQA model', choices=['baseline', 'attention', 'BERT'], required=True)
 
     # Data params
     parser.add_argument('--train_img',     type=str,            help='path to training images directory', required=True)
@@ -86,6 +86,21 @@ def main():
     batch_size = args.batch_size
     lr = args.learning_rate
 
+    image_size = None
+    if args.model_type == 'baseline':
+        image_size = (224, 224)
+
+    elif args.model_type == 'attention':
+        image_size = (448, 448)
+
+    # TODO: VQA w/ BERT
+    elif args.model_type == 'BERT':
+        pass
+
+    else:
+        raise ValueError('Model Type Not Defined! {} \n '
+                         'See --model_type choices'.format(args.model_type))
+
     # TODO: Multi-GPU PyTorch Implementation
     # if args.num_gpus > 1 and torch.cuda.device_count() > 1:
     #     print("Using {} GPUs!".format(torch.cuda.device_count()))
@@ -117,7 +132,7 @@ def main():
 
         # Dataset & Dataloader
         train_dataset = VQADataset(args.train_file, args.train_img, word2idx, label2idx, max_seq_length,
-                                   transform=Compose([Resize((224, 224)), ToTensor(), Normalize((0.485, 0.456, 0.406),
+                                   transform=Compose([Resize(image_size), ToTensor(), Normalize((0.485, 0.456, 0.406),
                                                                                                 (0.229, 0.224, 0.225))]))
 
         train_loader = torch.utils.data.DataLoader(train_dataset, batch_size, shuffle=True,
@@ -134,7 +149,7 @@ def main():
         if args.val_file:
             # Use the same word-index dicts as that obtained for the training set
             val_dataset = VQADataset(args.val_file, args.val_img, word2idx, label2idx, max_seq_length,
-                                     transform=Compose([Resize((224, 224)), ToTensor(), Normalize((0.485, 0.456, 0.406),
+                                     transform=Compose([Resize(image_size), ToTensor(), Normalize((0.485, 0.456, 0.406),
                                                                                                   (0.229, 0.224, 0.225))]))
 
             val_loader = torch.utils.data.DataLoader(val_dataset, batch_size, shuffle=True,
@@ -203,17 +218,14 @@ def main():
                 # Sort batch based on sequence length
                 image, question, label, ques_len = sort_batch(image, question, label, ques_len)
 
-                # Set `question` to sequence-first --> swap: (batch x seq) -> (seq x batch)
-                question = question.transpose(1, 0)
-
                 # Load data onto the available device
-                image = image.to(device)
-                question = question.to(device)
-                ques_len = ques_len.to(device)
-                label = label.to(device)
+                image = image.to(device)                        # [B, C, H, W]
+                question = question.to(device)                  # [B, L]
+                ques_len = ques_len.to(device)                  # [B]
+                label = label.to(device)                        # [B]
 
                 # Forward Pass
-                label_predict = model(image, question, ques_len, device)
+                label_predict = model(image, question, ques_len)
 
                 # Compute Loss
                 loss = criterion(label_predict, label)
@@ -355,9 +367,6 @@ def compute_validation_metrics(model, dataloader, device, size):
             # Sort batch based on sequence length
             image, question, label, ques_len = sort_batch(image, question, label, ques_len)
 
-            # Set `question` to sequence-first --> swap: (batch x seq) -> (seq x batch)
-            question = question.transpose(1, 0)
-
             # Load data onto the available device
             image = image.to(device)
             question = question.to(device)
@@ -365,7 +374,7 @@ def compute_validation_metrics(model, dataloader, device, size):
             label = label.to(device)
 
             # Forward Pass
-            label_logits = model(image, question, ques_len, device)
+            label_logits = model(image, question, ques_len)
 
             # Compute Accuracy
             label_predicted = torch.argmax(label_logits, dim=1)

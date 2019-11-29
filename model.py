@@ -288,10 +288,9 @@ class PhraseConvPool(nn.Module):
 
 class ParallelCoAttention(nn.Module):
     """
-    Implements Parallel Co-Attention mechanism given
-    image & question features
+    Implements Parallel Co-Attention mechanism
+    given image & question features.
     """
-
     def __init__(self):
         super().__init__()
         pass

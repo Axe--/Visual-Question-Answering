@@ -9,5 +9,6 @@ log*
 *sample.md
 .DS_Store
 *delete*
+tmp
 *pycache*
 *notes*txt

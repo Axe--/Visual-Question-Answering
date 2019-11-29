@@ -132,9 +132,8 @@ The experiment output log directory is structured as follows:
 ..
 ├── expt_dir
 │   └── expt_name
-│       ├── vocab_K.pkl
 │       └── run_name
-│           ├── events.out.tfevents.1572463346.axe-H270-Gaming-3
+│           ├── events.out.tfevents
 │           ├── model_4000.pth
 │           └── train_log.txt
 

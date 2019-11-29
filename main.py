@@ -12,7 +12,7 @@ from time import time
 from torch.utils.data import DataLoader
 from torchvision.transforms import Compose, Resize, ToTensor, Normalize
 from tensorboardX import SummaryWriter
-from model import VQABaselineNet
+from model import VQABaselineNet, HierarchicalCoAttentionNet
 from dataloader import VQADataset
 from torch.optim.lr_scheduler import StepLR
 from utils import sort_batch, load_vocab
@@ -21,10 +21,10 @@ from utils import PATH_VGG_WEIGHTS
 
 """
 Train (with validation):
-python3 main.py --mode train --expt_name sample_model_K_2_yes_no --expt_dir /home/axe/Projects/VQA_baseline/results_log 
+python3 main.py --mode train --expt_name demo_expt --expt_dir /home/axe/Projects/VQA_baseline/results_log 
 --train_img /home/axe/Datasets/VQA_Dataset/train2014 --train_file /home/axe/Datasets/VQA_Dataset/vqa_dataset.txt 
 --val_img /home/axe/Datasets/VQA_Dataset/train2014 --val_file /home/axe/Projects/VQA_baseline/sample_data.txt  
---gpu_id 1 --num_epochs 50 --batch_size 256 --num_cls 2 --save_interval 1000 --log_interval 100 --run_name demo_new_schdl 
+--gpu_id 1 --num_epochs 50 --batch_size 256 --num_cls 2 --save_interval 1000 --log_interval 100 --run_name demo_run
 --lr 1e-4
 Test:
 """
@@ -38,14 +38,14 @@ def main():
     parser.add_argument('--expt_dir',      type=str,            help='root directory to save model & summaries', required=True)
     parser.add_argument('--expt_name',     type=str,            help='expt_dir/expt_name: organize experiments', required=True)
     parser.add_argument('--run_name',      type=str,            help='expt_dir/expt_name/run_name: organize training runs', required=True)
-    parser.add_argument('--model_type',    type=str,            help='VQA model', choices=['baseline', 'attention', 'BERT'], required=True)
+    parser.add_argument('--model',         type=str,            help='VQA model', choices=['baseline', 'attention', 'bert'], required=True)
 
     # Data params
     parser.add_argument('--train_img',     type=str,            help='path to training images directory', required=True)
     parser.add_argument('--train_file',    type=str,            help='training dataset file', required=True)
     parser.add_argument('--val_img',       type=str,            help='path to validation images directory')
     parser.add_argument('--val_file',      type=str,            help='validation dataset file')
-    parser.add_argument('--num_cls', '-K', type=int_min_two,    help='top K answers (labels); min = 2', default=1000)
+    parser.add_argument('--num_cls', '-K', type=int_min_two,    help='top K answers (labels); min=2', default=1000)
 
     # Vocab params
     parser.add_argument('--vocab_file',    type=str,            help='vocabulary pickle file (gen. by prepare_data.py)')
@@ -63,7 +63,7 @@ def main():
 
     # Model params
     parser.add_argument('--model_ckpt',    type=str,            help='resume training/perform inference; e.g. model_1000.pth')
-    parser.add_argument('--vgg_wts_path',  type=str,            help='VGG-11 (bn) pre-trained weights (.pth) file', default=PATH_VGG_WEIGHTS)
+    parser.add_argument('--vgg_wts_path',  type=str,            help='VGG-11 (bn) pre-trained weights (.pth) file')
     parser.add_argument('--vgg_train',     type=str2bool,       help='whether to train the VGG encoder', default='false')
     # parser.add_argument('--model_config', type=str, help='model config file - specifies model architecture')
 
@@ -86,20 +86,18 @@ def main():
     batch_size = args.batch_size
     lr = args.learning_rate
 
-    image_size = None
-    if args.model_type == 'baseline':
-        image_size = (224, 224)
+    # Load vocab (.pickle) file
+    vocab = load_vocab(args.vocab_file)
+    print('Vocabulary loaded from {}'.format(args.vocab_file))
 
-    elif args.model_type == 'attention':
-        image_size = (448, 448)
+    # Unpack vocab
+    word2idx, idx2word, label2idx, idx2label, max_seq_length = [v for k, v in vocab.items()]
+    vocab_size = len(word2idx)
 
-    # TODO: VQA w/ BERT
-    elif args.model_type == 'BERT':
-        pass
+    # Model Config
+    model_configs = setup_model_configs(args, vocab_size)
 
-    else:
-        raise ValueError('Model Type Not Defined! {} \n '
-                         'See --model_type choices'.format(args.model_type))
+    image_size = model_configs[args.model]['image_size']
 
     # TODO: Multi-GPU PyTorch Implementation
     # if args.num_gpus > 1 and torch.cuda.device_count() > 1:
@@ -117,13 +115,6 @@ def main():
 
         print('Training Log Directory: {}\n'.format(log_dir))
 
-        # Load vocab (.pickle) file
-        vocab = load_vocab(args.vocab_file)
-        print('Vocabulary loaded from {}'.format(args.vocab_file))
-
-        # Unpack vocab
-        word2idx, idx2word, label2idx, idx2label, max_seq_length = [v for k, v in vocab.items()]
-
         # TensorBoard summaries setup  -->  /expt_dir/expt_name/run_name/
         writer = SummaryWriter(log_dir)
 
@@ -138,12 +129,12 @@ def main():
         train_loader = torch.utils.data.DataLoader(train_dataset, batch_size, shuffle=True,
                                                    drop_last=True, num_workers=args.num_workers)
 
-        print('Question Vocabulary Size: {} \n\n'.format(len(word2idx.keys())))
+        print('Question Vocabulary Size: {} \n\n'.format(vocab_size))
 
         print('Train Data Size: {}'.format(train_dataset.__len__()))
 
         # Plot data (image, question, answer) for sanity check
-        # plot_data(train_loader, idx2word, idx2label, num_plots=80)
+        # plot_data(train_loader, idx2word, idx2label, num_plots=10)
         # sys.exit()
 
         if args.val_file:
@@ -156,29 +147,21 @@ def main():
                                                      drop_last=True, num_workers=args.num_workers)
 
             log_msg = 'Validation Data Size: {}\n'.format(val_dataset.__len__())
-            log_msg += 'Accuracy on the validation set is computed using {} samples. See --val_size\n'.format(args.val_size)
+            log_msg += 'Validation Accuracy is computed using {} samples. See --val_size\n'.format(args.val_size)
 
             print_and_log(log_msg, log_file)
 
-        # Question Encoder params
-        vocabulary_size = len(train_dataset.word2idx.keys())
-        word_embedding_dim = 300
-        encoder_hidden_units = 1024
-
-        question_encoder_params = {'vocab_size': vocabulary_size, 'inp_emb_dim': word_embedding_dim,
-                                   'enc_units': encoder_hidden_units, 'batch_size': batch_size}
-
-        # Image Encoder params
-        is_vgg_trainable = args.vgg_train  # default = False
-        vgg_wts_path = args.vgg_wts_path  # default = PATH_VGG_WTS
-
-        image_encoder_params = {'is_trainable': is_vgg_trainable, 'weights_path': vgg_wts_path}
-
-        # Num of classes is the top-K labels + 1 (for UNKNOWN)
+        # Num of classes = K + 1 (for UNKNOWN)
         num_classes = args.num_cls + 1
 
+        # Setup model params
+        question_encoder_params = model_configs[args.model]['question_params']
+        image_encoder_params = model_configs[args.model]['image_params']
+
         # Define model & load to device
-        model = VQABaselineNet(question_encoder_params, image_encoder_params, K=num_classes)
+        VQANet = model_configs[args.model]['model']
+
+        model = VQANet(question_encoder_params, image_encoder_params, K=num_classes)
         model.to(device)
 
         # Load model checkpoint file (if specified) from `log_dir`
@@ -299,42 +282,9 @@ def main():
         writer.close()
         log_file.close()
 
-    # Test
-    """
+    # TODO: Test/Inference
     elif args.mode == 'test':
-        test_dataset = VQADataset(????)
-
-        test_loader = torch.utils.data.DataLoader(val_dataset, batch_size, shuffle=False, drop_last=True)
-
-        checkpoint = torch.load(args.model_ckpt_file)
-
-        # TODO: Retrieve Params from trained model (checkpoint file)
-        # Question Encoder params
-        vocabulary_size = -1
-        word_embedding_dim = 256
-        encoder_hidden_units = 1024
-
-        question_encoder_params = {'vocab_size': vocabulary_size, 'inp_emb_dim': word_embedding_dim,
-                                   'enc_units': encoder_hidden_units, 'batch_size': batch_size}
-
-        # Image Encoder params
-        is_vgg_trainable = args.is_vgg_trainable        # default = False
-        vgg_wts_path = args.vgg_wts_path                # default = PATH_VGG_WTS
-
-        image_encoder_params = {'is_trainable': is_vgg_trainable, 'weights_path': vgg_wts_path}
-
-        # Define model & load to device
-        model = VQABaselineNet(question_encoder_params, image_encoder_params)
-        model.to(device)
-
-        # Load pre-trained weights for validation
-        model.load_state_dict(checkpoint)
-        print('Model successfully loaded from {}'.format(args.model_ckpt_file))
-
-        # Compute test accuracy
-        test_accuracy = compute_accuracy(model, test_loader, device, show_preds=True, mode='Test')
-        print('Test Accuracy: {:.2f} %'.format(test_accuracy))
-    """
+        pass
 
 
 def compute_validation_metrics(model, dataloader, device, size):
@@ -433,6 +383,31 @@ def setup_logs_file(parser, log_dir, file_name='train_log.txt'):
     log_file.flush()
 
     return log_file
+
+
+def setup_model_configs(args, vocab_size):
+    if not args.vgg_wts_path:
+        vgg_weights = PATH_VGG_WEIGHTS
+    else:
+        vgg_weights = args.vgg_wts_path
+
+    img_encoder_params = dict(is_trainable=args.vgg_train,      # default = False
+                              weights_path=vgg_weights)
+
+    model_config = {'baseline': dict(model=VQABaselineNet,
+                                     image_size=(224, 224),
+                                     image_params=img_encoder_params,
+                                     question_params=dict(vocab_size=vocab_size,
+                                                          word_emb_dim=300,
+                                                          hidden_dim=1024)),
+
+                    'attention': dict(model=HierarchicalCoAttentionNet,
+                                      image_size=(448, 448),
+                                      image_params=img_encoder_params,
+                                      question_params=dict(vocab_size=vocab_size,
+                                                           word_emb_dim=512,
+                                                           hidden_dim=512))}
+    return model_config
 
 
 if __name__ == '__main__':

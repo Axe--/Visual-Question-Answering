@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
-from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+from torch.nn.utils.rnn import pack_padded_sequence
 from collections import OrderedDict
 
 
@@ -107,23 +107,21 @@ class ImageBaselineEncoder(nn.Module):
 class QuestionBaselineEncoder(nn.Module):
     """Question Encoder - GRU"""
 
-    def __init__(self, vocab_size, inp_emb_dim, enc_units, batch_size):
+    def __init__(self, vocab_size, word_emb_dim, hidden_dim):
         super(QuestionBaselineEncoder, self).__init__()
 
-        self.batch_size = batch_size
-        self.encoder_hidden_units = enc_units
+        self.hidden_dim = hidden_dim
         self.vocab_size = vocab_size
-        self.input_embedding_dim = inp_emb_dim
+        self.word_emb_dim = word_emb_dim
 
         # Input word embedding lookup matrix
-        self.word_embedding_matrix = nn.Sequential(nn.Embedding(self.vocab_size, self.input_embedding_dim),
-                                                   nn.Tanh())
+        self.word_embedding = nn.Sequential(nn.Embedding(self.vocab_size, self.word_emb_dim), nn.Tanh())
 
         # RNN Layer: (input_dim, hidden_units)
-        self.gru = nn.GRU(self.input_embedding_dim, self.encoder_hidden_units)
+        self.gru = nn.GRU(self.word_emb_dim, self.hidden_dim)
 
         # Question embedding layer (1024-dim)
-        self.embedding_layer = nn.Sequential(nn.Linear(enc_units, 1024),
+        self.embedding_layer = nn.Sequential(nn.Linear(self.hidden_dim, 1024),
                                              nn.Tanh())
 
     def forward(self, x, seq_lengths):
@@ -135,7 +133,7 @@ class QuestionBaselineEncoder(nn.Module):
         :return: output embedding tensor (batch_size, encoder_hidden_units)
                 | `after torch.squeeze(dim=0)`
         """
-        x = self.word_embedding_matrix(x)                   # [seq_len, batch_size, emb_dim]
+        x = self.word_embedding(x)                   # [seq_len, batch_size, emb_dim]
 
         # By default, hidden (& cell) are the final state in the sequence, viz. mostly pad token.
         # `PackedSequence` selects the last 'non-pad' element in the sequence.
@@ -231,21 +229,21 @@ class QuestionCoAttentionEncoder(nn.Module):
 
     Finally, apply an LSTM to encode the question.
     """
-    def __init__(self, vocab_size, inp_emb_dim, enc_units, batch_size):
+    def __init__(self, vocab_size, word_emb_dim, hidden_dim, mlp_question_dim=1024):
         super().__init__()
 
         self.vocab_size = vocab_size
-        self.embedding_dim = inp_emb_dim
-        self.lstm_units = enc_units
+        self.embedding_dim = word_emb_dim
+        self.hidden_dim = hidden_dim
 
         # Word Embedding matrix
         self.word_embedding = nn.Embedding(self.vocab_size, self.embedding_dim)
 
         # Phrase Convolution + MaxPool
-        self.phrase_conv = PhraseConvPool(self.embedding_dim)
+        self.phrase_conv_pool = PhraseConvPool(self.embedding_dim)
 
         # Sentence LSTM
-        self.question_lstm = nn.LSTM(self.embedding_dim, self.lstm_units)
+        self.question_lstm = nn.LSTM(self.embedding_dim, self.hidden_dim)
 
     def forward(self, x, seq_lens):
 

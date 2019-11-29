@@ -128,25 +128,24 @@ class QuestionBaselineEncoder(nn.Module):
         """
         Performs forward pass on question sequence
 
-        :param x: input tensor (seq_len, batch)
-        :param seq_lengths: corresponding sequence lengths (batch)
-        :return: output embedding tensor (batch_size, encoder_hidden_units)
+        :param x: input tensor [batch_size, seq_len]
+        :param seq_lengths: corresponding sequence lengths [batch_size]
+        :return: output embedding tensor [batch_size, hidden_dim]
                 | `after torch.squeeze(dim=0)`
         """
-        x = self.word_embedding(x)                   # [seq_len, batch_size, emb_dim]
+        x = self.word_embedding(x)                  # [batch_size, seq_len, word_emb_dim]
 
         # By default, hidden (& cell) are the final state in the sequence, viz. mostly pad token.
         # `PackedSequence` selects the last 'non-pad' element in the sequence.
-        x = pack_padded_sequence(x, seq_lengths, batch_first=True)  # Un-Pad
+        x = pack_padded_sequence(x, seq_lengths, batch_first=True)
 
-        # Fwd Pass  (use either hidden or out[-1])
-        outputs, hidden = self.gru(x)
+        # outputs: PackedSequence, hidden: tensor
+        outputs, hidden = self.gru(x)               # outputs: [sum_{i=0}^batch (seq_lengths[i]), hidden_dim]
 
-        # Squeeze: [1, batch_size, enc_hidden_units] --> [batch_size, enc_hidden_units]
-        hidden = torch.squeeze(hidden, dim=0)
+        hidden = torch.squeeze(hidden, dim=0)       # hidden: [1, batch_size, hidden_dim] --> [batch_size, hidden_dim]
 
-        # Map the final hidden state output to 1024-dim (image-text joint space)
-        x_emb = self.embedding_layer(hidden)
+        # Map the final hidden state to 1024-dim (image-question joint space)
+        x_emb = self.embedding_layer(hidden)        # [batch_size, 1024]
 
         return x_emb
 
@@ -229,7 +228,7 @@ class QuestionCoAttentionEncoder(nn.Module):
 
     Finally, apply an LSTM to encode the question.
     """
-    def __init__(self, vocab_size, word_emb_dim, hidden_dim, mlp_question_dim=1024):
+    def __init__(self, vocab_size, word_emb_dim, hidden_dim, mlp_dim=1024):
         super().__init__()
 
         self.vocab_size = vocab_size

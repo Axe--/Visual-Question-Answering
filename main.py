@@ -284,7 +284,7 @@ def main():
 
     # TODO: Test/Inference
     elif args.mode == 'test':
-        pass
+        raise NotImplementedError('TODO: test mode')
 
 
 def compute_validation_metrics(model, dataloader, device, size):

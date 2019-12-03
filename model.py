@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
-from torch.nn.utils.rnn import pack_padded_sequence
+from torch import Tensor
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from collections import OrderedDict
 
 
@@ -150,19 +151,38 @@ class QuestionBaselineEncoder(nn.Module):
         return x_emb
 
 
-# **************************************************************
+# ************************************************************************************************
+
+
 class HierarchicalCoAttentionNet(nn.Module):
     """Hierarchical Co-Attention Architecture"""
 
-    def __init__(self, ques_enc_params, img_enc_params, K):
+    def __init__(self, ques_enc_params, img_enc_params, K, mlp_dim=1024):
         super().__init__()
+        hidden_dim = ques_enc_params['hidden_dim']
 
         self.image_encoder = ImageCoAttentionEncoder(**img_enc_params)
         self.question_encoder = QuestionCoAttentionEncoder(**ques_enc_params)
-        self.parallel_co_attention = ParallelCoAttention()
+        self.parallel_co_attention = ParallelCoAttention(hidden_dim)
+        self.mlp_classify = MLPClassifier(hidden_dim, mlp_dim, K)
 
-    def forward(self):
-        pass
+    def forward(self, x_img, x_ques, x_ques_lens):
+        # Word, Phrase & Sentence features
+        x_word, x_phrase, x_sentence = self.question_encoder(x_ques, x_ques_lens)   # [batch_size, max_seq_len, 512]
+
+        # Question Features ([word, phrase, sentence])
+        x_ques_features = [x_word, x_phrase, x_sentence]                            # 3*[batch_size, max_seq_len, 512]
+
+        # Image Features
+        x_img_features = self.image_encoder(x_img)                                  # [batch_size, spatial_locs, 512]
+
+        # Co-Attention - Attention weighted image & question features (at all 3 levels)
+        x_img_attn, x_ques_attn = self.parallel_co_attention()                      # 3*[batch, 512], [3*batch, 512]
+
+        # Predict Answer (logits)
+        x_logits = self.mlp_classify(x_img_attn, x_ques_attn)
+
+        return x_logits
 
 
 class ImageCoAttentionEncoder(nn.Module):
@@ -191,6 +211,8 @@ class ImageCoAttentionEncoder(nn.Module):
 
         # Flatten (14 x 14 x 512) --> (14*14, 512)
         x_feat = self.flatten(x_feat_map)
+
+        x_feat = x_feat.permute(0, 2, 1)                            # [batch_size, spatial_locs, 512]
 
         return x_feat
 
@@ -228,7 +250,7 @@ class QuestionCoAttentionEncoder(nn.Module):
 
     Finally, apply an LSTM to encode the question.
     """
-    def __init__(self, vocab_size, word_emb_dim, hidden_dim, mlp_dim=1024):
+    def __init__(self, vocab_size, word_emb_dim, hidden_dim):
         super().__init__()
 
         self.vocab_size = vocab_size
@@ -236,17 +258,42 @@ class QuestionCoAttentionEncoder(nn.Module):
         self.hidden_dim = hidden_dim
 
         # Word Embedding matrix
-        self.word_embedding = nn.Embedding(self.vocab_size, self.embedding_dim)
+        self.word_embedding = nn.Embedding(self.vocab_size, self.embedding_dim, padding_idx=0)     # {<PAD> : 0}
 
         # Phrase Convolution + MaxPool
         self.phrase_conv_pool = PhraseConvPool(self.embedding_dim)
 
         # Sentence LSTM
-        self.question_lstm = nn.LSTM(self.embedding_dim, self.hidden_dim)
+        self.sentence_lstm = nn.LSTM(self.embedding_dim, self.hidden_dim)
 
-    def forward(self, x, seq_lens):
+    def forward(self, x, x_lens):
+        """
+        Forward pass to compute the word, phrase & sentence level representations.
 
-        pass
+        :param x: question token sequence [batch_size, max_seq_len]
+        :param x_lens: actual sequence length of the corresponding question [batch_size]
+        :returns: word, phrase & sentence vectors;  3 * [batch_size, max_seq_len, hidden_dim]
+        """
+        # max sequence length (in the dataset); for padding PackedSequence
+        max_seq_len = x.shape[1]
+
+        x_word_emb = self.word_embedding(x)                             # [batch_size, max_seq_len, emb_dim]
+
+        x_phrase_emb = self.phrase_conv_pool(x_word_emb)                # [batch_size, max_seq_len, emb_dim]
+
+        # Pack the padded input
+        x_phrase_emb = pack_padded_sequence(x_phrase_emb, x_lens, batch_first=True)
+
+        x_sentence_emb, last_state = self.sentence_lstm(x_phrase_emb)
+
+        # Un-pack (Pad) the packed phrase & sentence feature sequences
+        x_phrase_emb = pad_packed_sequence(x_phrase_emb, batch_first=True,
+                                           total_length=max_seq_len)[0]
+
+        x_sentence_emb = pad_packed_sequence(x_sentence_emb, batch_first=True,
+                                             total_length=max_seq_len)[0]
+
+        return x_word_emb, x_phrase_emb, x_sentence_emb                 # 3*[batch_size, max_seq_len, hidden_dim]
 
 
 class PhraseConvPool(nn.Module):
@@ -255,14 +302,16 @@ class PhraseConvPool(nn.Module):
     def __init__(self, emb_dim):
         super().__init__()
         self.conv_unigram = nn.Sequential(nn.ConstantPad1d((0, 0), 0), nn.Conv1d(emb_dim, emb_dim, 1, 1), nn.Tanh())
-        self.conv_bigram = nn.Sequential(nn.ConstantPad1d((1, 0), 0), nn.Conv1d(emb_dim, emb_dim, 2, 1), nn.Tanh())
+        self.conv_bigram  = nn.Sequential(nn.ConstantPad1d((1, 0), 0), nn.Conv1d(emb_dim, emb_dim, 2, 1), nn.Tanh())
         self.conv_trigram = nn.Sequential(nn.ConstantPad1d((1, 1), 0), nn.Conv1d(emb_dim, emb_dim, 3, 1), nn.Tanh())
 
         # Max-Pool (kernel = 1x3) - subsample from n-gram representations of tokens)
         self.max_pool = nn.MaxPool2d(kernel_size=(1, 3))
 
     def forward(self, x_question):
-        batch_size, emb_dim, seq_len = x_question.shape                 # [batch_size, emb_dim, max_seq_len]
+        batch_size, max_seq_len, emb_dim = x_question.shape             # [batch_size, max_seq_len, emb_dim]
+
+        x_question = x_question.permute(0, 2, 1)                        # [batch_size, emb_dim, max_seq_len]
 
         # Compute the n-gram phrase embeddings (n=1,2,3)
         x_uni = self.conv_unigram(x_question)
@@ -275,7 +324,7 @@ class PhraseConvPool(nn.Module):
         # Position the three n-gram representations along a new axis (for pooling)
         x = x.permute(0, 2, 1)                                          # [batch_size, max_seq_len, 3*emb_dim]
         x = x.unsqueeze(dim=3)                                          # [batch_size, max_seq_len, 3*emb_dim, 1]
-        x = x.reshape([batch_size, seq_len, emb_dim, 3])                # [batch_size, max_seq_len, emb_dim, 3]
+        x = x.reshape([batch_size, max_seq_len, emb_dim, 3])            # [batch_size, max_seq_len, emb_dim, 3]
 
         # Max-pool across n-gram features
         x = self.max_pool(x).squeeze(dim=3)                             # [batch_size, max_seq_len, emb_dim]
@@ -288,7 +337,71 @@ class ParallelCoAttention(nn.Module):
     Implements Parallel Co-Attention mechanism
     given image & question features.
     """
-    def __init__(self):
+    def __init__(self, hidden_dim):
+        super().__init__()
+        self.hidden_dim = hidden_dim
+
+        # Affinity layer
+        self.W_b = nn.Linear(self.hidden_dim, self.hidden_dim)
+
+        # Attention layers
+        self.W_v = nn.Linear(self.hidden_dim, self.hidden_dim)
+        self.W_q = nn.Linear(self.hidden_dim, self.hidden_dim)
+
+        self.w_v = nn.Linear(self.hidden_dim, 1)
+        self.w_q = nn.Linear(self.hidden_dim, 1)
+
+    def forward(self, x_img, x_ques_hierarchy):
+        """
+        Given image & question features, for all three levels in the question hierarchy,
+        computes the attention-weighted image & question features.
+
+        :param Tensor x_img: image features (flattened map)  [batch_size, spatial_locs, 512]
+        :param list x_ques_hierarchy: question features list(word, phrase, sentence)  3*[batch_size, max_seq_len, 512]
+
+        :returns: image-attention                   3*[batch_size, 512],
+                  question-attention features       3*[batch_size, 512]
+        :rtype: (list, list)
+        """
+        # For all feature levels of the question hierarchy, compute the image & question features
+        img_feats = []
+        quest_feats = []
+
+        for x_ques in x_ques_hierarchy:
+            Q = x_ques                                              # [batch_size, max_seq_len, 512]
+            V = x_img.permute(0, 2, 1)                              # [batch_size,  512, spatial_locs]
+
+            # Affinity matrix
+            C = F.tanh(torch.bmm(Q, V))                             # [batch_size, max_seq_len, spatial_locs]
+            V = V.permute(0, 2, 1)                                  # [batch_size, spatial_locs, 512]
+
+            H_v = F.tanh(self.W_v(V) +                              # [batch_size, spatial_locs, 512]
+                         torch.bmm(C.transpose(2, 1), self.W_q(Q)))
+
+            H_q = F.tanh(self.W_q(Q) +                              # [batch_size, max_seq_len, 512]
+                         torch.bmm(C, self.W_v(V)))
+
+            # Attention weights
+            a_v = F.softmax(self.w_v(H_v), dim=1)                   # [batch_size, spatial_locs, 1]
+            a_q = F.softmax(self.w_q(H_q), dim=1)                   # [batch_size, max_seq_len, 1]
+
+            # Compute attention-weighted features
+            v = torch.sum(a_v * V, dim=1)                           # [batch_size, 512]
+            q = torch.sum(a_q * Q, dim=1)                           # [batch_size, 512]
+
+            img_feats.append(v)
+            quest_feats.append(q)
+
+        return img_feats, quest_feats                               # 3*[batch_size, 512], 3*[batch_size, 512]
+
+
+class MLPClassifier(nn.Module):
+    """
+    Implements the MLP module for classifying
+    answers, given the attention-weighted
+    image & question features
+    """
+    def __init__(self, hidden_dim, mlp_dim, K):
         super().__init__()
         pass
 

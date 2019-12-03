@@ -406,7 +406,9 @@ def setup_model_configs(args, vocab_size):
                                       image_params=img_encoder_params,
                                       question_params=dict(vocab_size=vocab_size,
                                                            word_emb_dim=512,
-                                                           hidden_dim=512))}
+                                                           hidden_dim=512),
+                                      mlp_dim=1024)}
+
     return model_config
 
 

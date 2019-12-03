@@ -95,9 +95,9 @@ def main():
     vocab_size = len(word2idx)
 
     # Model Config
-    model_configs = setup_model_configs(args, vocab_size)
+    model_config = setup_model_configs(args, vocab_size)
 
-    image_size = model_configs[args.model]['image_size']
+    image_size = model_config['image_size']
 
     # TODO: Multi-GPU PyTorch Implementation
     # if args.num_gpus > 1 and torch.cuda.device_count() > 1:
@@ -155,11 +155,11 @@ def main():
         num_classes = args.num_cls + 1
 
         # Setup model params
-        question_encoder_params = model_configs[args.model]['question_params']
-        image_encoder_params = model_configs[args.model]['image_params']
+        question_encoder_params = model_config['question_params']
+        image_encoder_params = model_config['image_params']
 
         # Define model & load to device
-        VQANet = model_configs[args.model]['model']
+        VQANet = model_config['model']
 
         model = VQANet(question_encoder_params, image_encoder_params, K=num_classes)
         model.to(device)
@@ -386,6 +386,12 @@ def setup_logs_file(parser, log_dir, file_name='train_log.txt'):
 
 
 def setup_model_configs(args, vocab_size):
+    """
+    Defines the model configuration for VQA networks.
+
+    Returns the model config of the selected model `args.model`
+    """
+
     if not args.vgg_wts_path:
         vgg_weights = PATH_VGG_WEIGHTS
     else:
@@ -409,7 +415,7 @@ def setup_model_configs(args, vocab_size):
                                                            hidden_dim=512),
                                       mlp_dim=1024)}
 
-    return model_config
+    return model_config[args.model]
 
 
 if __name__ == '__main__':

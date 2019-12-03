@@ -159,28 +159,30 @@ class HierarchicalCoAttentionNet(nn.Module):
 
     def __init__(self, ques_enc_params, img_enc_params, K, mlp_dim=1024):
         super().__init__()
-        hidden_dim = ques_enc_params['hidden_dim']
+        self.hidden_dim = ques_enc_params['hidden_dim']
 
         self.image_encoder = ImageCoAttentionEncoder(**img_enc_params)
         self.question_encoder = QuestionCoAttentionEncoder(**ques_enc_params)
-        self.parallel_co_attention = ParallelCoAttention(hidden_dim)
-        self.mlp_classify = MLPClassifier(hidden_dim, mlp_dim, K)
+
+        self.co_attention = ParallelCoAttention(self.hidden_dim)
+
+        self.mlp_classify = MLPClassifier(self.hidden_dim, mlp_dim, K)
 
     def forward(self, x_img, x_ques, x_ques_lens):
         # Word, Phrase & Sentence features
-        x_word, x_phrase, x_sentence = self.question_encoder(x_ques, x_ques_lens)   # [batch_size, max_seq_len, 512]
+        x_word, x_phrase, x_sentence = self.question_encoder(x_ques, x_ques_lens)   # [batch, max_seq_len, hidden_dim]
 
         # Question Features ([word, phrase, sentence])
-        x_ques_features = [x_word, x_phrase, x_sentence]                            # 3*[batch_size, max_seq_len, 512]
+        x_ques_features = [x_word, x_phrase, x_sentence]                            # 3*[batch, max_seq_len, hidden_dim]
 
         # Image Features
-        x_img_features = self.image_encoder(x_img)                                  # [batch_size, spatial_locs, 512]
+        x_img_features = self.image_encoder(x_img)                                  # [batch, spatial_locs, hidden_dim]
 
         # Co-Attention - Attention weighted image & question features (at all 3 levels)
-        x_img_attn, x_ques_attn = self.parallel_co_attention()                      # 3*[batch, 512], [3*batch, 512]
+        x_img_attn, x_ques_attn = self.co_attention(x_img_features, x_ques_features)    # 3*[B, hid_dim], 3*[B, hid_dim]
 
         # Predict Answer (logits)
-        x_logits = self.mlp_classify(x_img_attn, x_ques_attn)
+        x_logits = self.mlp_classify(x_img_attn, x_ques_attn)                       # [batch_size, K]
 
         return x_logits
 
@@ -368,17 +370,17 @@ class ParallelCoAttention(nn.Module):
         quest_feats = []
 
         for x_ques in x_ques_hierarchy:
-            Q = x_ques                                              # [batch_size, max_seq_len, 512]
-            V = x_img.permute(0, 2, 1)                              # [batch_size,  512, spatial_locs]
+            Q = x_ques                                              # [batch_size, max_seq_len, hidden_dim]
+            V = x_img.permute(0, 2, 1)                              # [batch_size,  hidden_dim, spatial_locs]
 
             # Affinity matrix
             C = F.tanh(torch.bmm(Q, V))                             # [batch_size, max_seq_len, spatial_locs]
-            V = V.permute(0, 2, 1)                                  # [batch_size, spatial_locs, 512]
+            V = V.permute(0, 2, 1)                                  # [batch_size, spatial_locs, hidden_dim]
 
-            H_v = F.tanh(self.W_v(V) +                              # [batch_size, spatial_locs, 512]
+            H_v = F.tanh(self.W_v(V) +                              # [batch_size, spatial_locs, hidden_dim]
                          torch.bmm(C.transpose(2, 1), self.W_q(Q)))
 
-            H_q = F.tanh(self.W_q(Q) +                              # [batch_size, max_seq_len, 512]
+            H_q = F.tanh(self.W_q(Q) +                              # [batch_size, max_seq_len, hidden_dim]
                          torch.bmm(C, self.W_v(V)))
 
             # Attention weights
@@ -386,24 +388,47 @@ class ParallelCoAttention(nn.Module):
             a_q = F.softmax(self.w_q(H_q), dim=1)                   # [batch_size, max_seq_len, 1]
 
             # Compute attention-weighted features
-            v = torch.sum(a_v * V, dim=1)                           # [batch_size, 512]
-            q = torch.sum(a_q * Q, dim=1)                           # [batch_size, 512]
+            v = torch.sum(a_v * V, dim=1)                           # [batch_size, hidden_dim]
+            q = torch.sum(a_q * Q, dim=1)                           # [batch_size, hidden_dim]
 
             img_feats.append(v)
             quest_feats.append(q)
 
-        return img_feats, quest_feats                               # 3*[batch_size, 512], 3*[batch_size, 512]
+        return img_feats, quest_feats                               # 3*[batch, hidden_dim], 3*[batch, hidden_dim]
 
 
 class MLPClassifier(nn.Module):
     """
     Implements the MLP module for classifying
-    answers, given the attention-weighted
-    image & question features
+    answers, given the hierarchical attention-weighted
+    image & question features.
     """
     def __init__(self, hidden_dim, mlp_dim, K):
         super().__init__()
-        pass
 
-    def forward(self):
-        pass
+        self.W_w = nn.Linear(hidden_dim, hidden_dim)
+        self.W_p = nn.Linear(2*hidden_dim, hidden_dim)
+        self.W_s = nn.Linear(2*hidden_dim, mlp_dim)
+        self.W_h = nn.Linear(mlp_dim, K)
+
+    def forward(self, x_img_feats, x_ques_feats):
+        """
+        Recursively encode the image & question features
+        across the three levels.
+
+        :param list x_img_feats: attention-weighted image representation         # 3*[B, hidden_dim]
+        :param list x_ques_feats: attention-weighted question representation     # 3*[B, hidden_dim]
+
+        :return: logit (class prediction)  [batch_size, K]
+        """
+        q_w, q_p, q_s = x_ques_feats                                    # [batch_size, hidden_dim]
+        v_w, v_p, v_s = x_img_feats                                     # [batch_size, hidden_dim]
+
+        h_w = F.tanh(self.W_w(q_w + v_w))                               # [batch_size, hidden_dim]
+        h_p = F.tanh(self.W_p(torch.cat([q_p + v_p, h_w], dim=1)))      # [batch_size, hidden_dim]
+        h_s = F.tanh(self.W_s(torch.cat([q_s + v_s, h_p], dim=1)))      # [batch_size, mlp_dim]
+
+        # Final answer (classification logit)
+        logit = self.W_h(h_s)                                           # [batch_size, K]
+
+        return logit

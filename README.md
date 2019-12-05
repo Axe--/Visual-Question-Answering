@@ -1,7 +1,7 @@
-# VQA Baseline
-VQA PyTorch implementations for Open-Ended Question-Answering
+# Visual Question Answering
+VQA implementations in PyTorch for Open-Ended Question-Answering
 - [Baseline <i>(LSTM Q + I)</i>](#references)
-- [Hierarchical Co-Attention <i>(Parallel)</i>](#references) 
+- [Hierarchical Co-Attention <i>(Parallel)</i>](#references)
 
 
 ---
@@ -45,63 +45,36 @@ For validation/test sets, remove the vocabulary flags: `-v`, `-c`, `-K`.
 ---
 ## Architecture
 
+
+###Baseline
+
+
 The architecture can be summarized as:-
 
-Image --> CNN_encoder --> image_embedding <br>
-Question --> LSTM_encoder --> question_embedding <br>
+Image --> CNN_encoder --> <i>image_embedding</i> <br>
+Question --> LSTM_encoder --> <i>question_embedding</i> <br>
 
-(image_embedding * question_embedding) --> FC --> Softmax --> answer_probability
+(image_embedding * question_embedding) --> MLP_Classifier --> <i>answer_logit</i>
 
-![Alt text](assets/vqa_baseline_architecture.png?raw=true "Baseline Architecture")
+![Baseline](assets/vqa_baseline_architecture.png?raw=true "Baseline Architecture")
 
 <br>
-PyTorch Representation:
 
-> Image_Encoder() --> img_emb       <br>
-  Question_Encoder() --> ques_emb   <br>
-  img_emb * ques_emb --> MLP() --> pred_cls
 
-```
-VQABaselineNet(
-  (image_encoder): ImageEncoder(
-    (vgg11_encoder): Sequential(
-      (0): Conv2d(3, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-      (1): BatchNorm2d(64, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-      (2): ReLU(inplace=True)
-      ...                                                   
-      # Max-pool (5x)
-      ...
-      (29): AdaptiveAvgPool2d(output_size=(7, 7))
-      (30): Flatten()
-      (31): Linear(in_features=25088, out_features=4096, bias=True)
-      (32): ReLU(inplace=True)
-      (33): Dropout(p=0.5, inplace=False)
-      (34): Linear(in_features=4096, out_features=4096, bias=True)
-    )
-    (embedding_layer): Sequential(
-      (0): Linear(in_features=4096, out_features=1024, bias=True)
-      (1): Tanh()
-    )
-  )
-  (question_encoder): QuestionEncoder(
-    (word_embedding_matrix): Sequential(
-      (0): Embedding(10, 300)
-      (1): Tanh()
-    )
-    (gru): GRU(300, 1024)
-    (embedding_layer): Linear(in_features=1024, out_features=1024, bias=True)
-  )
-  (mlp): Sequential(
-    (0): Linear(in_features=1024, out_features=1000, bias=True)
-    (1): Dropout(p=0.5, inplace=False)
-    (2): Tanh()
-    (3): Linear(in_features=1000, out_features=2, bias=True)
-    (4): Dropout(p=0.5, inplace=False)
-  )
-  (cls_predict): Softmax(dim=1)
-)
 
-```
+### Hierarchical Co-Attention
+
+The architecture can be summarized as:-
+
+Image --> CNN_encoder --> <i>image_embedding</i> <br>
+Question --> Word_Emb --> Phrase_Conv_MaxPool --> Sentence_LSTM --> <i>question_embedding</i> <br>
+
+ParallelCoAttention( image_embedding, question_embedding ) --> MLP_Classifier --> <i>answer_logit</i> 
+
+![HieCoAttn](assets/hiecoattn.png?raw=true "HieCoAttn Architecture")
+
+![Parallel](assets/parallel_attn.png?raw=true "HieCoAttn Architecture")
+
 
 ---
 
@@ -110,14 +83,17 @@ VQABaselineNet(
 Run the following script for training:
 
 ```bash
-$ python3 main.py --mode train --expt_name K_1000  --expt_dir /home/axe/Projects/VQA_baseline/results_log \
---train_img /home/axe/Datasets/VQA_Dataset/train2014 --train_file /home/axe/Datasets/VQA_Dataset/vqa_train2014.txt \
---val_img /home/axe/Datasets/VQA_Dataset/val2014 --val_file /home/axe/Datasets/VQA_Dataset/vqa_val2014.txt \
---gpu_id 0 --num_epochs 50 --batch_size 256 --num_cls 1000 --save_interval 1000 --log_interval 100 \
---run_name demo_run -lr 1e-4 --opt_lvl 1 --num_workers 2
+$ python3 main.py --mode train --expt_name K_1000_Attn --expt_dir /home/axe/Projects/VQA_baseline/results_log \
+--train_img /home/axe/Datasets/VQA_Dataset/raw/train2014 --train_file /home/axe/Datasets/VQA_Dataset/processed/vqa_train2014.txt \
+--val_img /home/axe/Datasets/VQA_Dataset/raw/val2014 --val_file /home/axe/Datasets/VQA_Dataset/processed/vqa_val2014.txt\
+--vocab_file /home/axe/Datasets/VQA_Dataset/processed/vocab_count_5_K_1000.pickle --save_interval 1000 \
+--log_interval 100 --gpu_id 0 --num_epochs 50 --batch_size 160 -K 1000 -lr 1e-4 --opt_lvl 1 --num_workers 6 \
+--run_name O1_wrk_6_bs_160 --model attention
 
 ```
-Specify `--model_ckpt` (filename.pth) to load model checkpoint from disk <i>(resume training/inference)</i>
+Specify `--model_ckpt` (filename.pth) to load model checkpoint from disk <i>(resume training/inference)</i> <br>
+
+Select the architecture by using `--model` ('baseline', 'attention'). <br>
 
 > *Note*: Setting num_cls (K) = 2 is equivalent to 'yes/no' setup. <br>
           For K > 2, it is an open-ended set.
@@ -140,11 +116,6 @@ The experiment output log directory is structured as follows:
 ```
 
 
-- **Option 1**
-    - 🍴 ..
-
-- **Option 2**
-    - 👯 ..
 
 ### Inference 
 
@@ -157,8 +128,9 @@ The experiment output log directory is structured as follows:
 > *TODO*: Test with BERT embeddings (Pre-Trained & Fine-Tuned)
 
 
-- [x] TensorBoardX
+- [x] Baseline & HieCoAttn
 - [ ] VQA w/ BERT
+- [ ] Inference & Attention Visualization
 
 ---
 

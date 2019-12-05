@@ -46,7 +46,7 @@ For validation/test sets, remove the vocabulary flags: `-v`, `-c`, `-K`.
 ## Architecture
 
 
-###Baseline
+### Baseline
 
 
 The architecture can be summarized as:-

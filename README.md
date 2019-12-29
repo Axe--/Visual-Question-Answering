@@ -8,12 +8,21 @@ VQA implementations in PyTorch for Open-Ended Question-Answering
 ## Table of Contents
 
 > The project comprises of the following sections.
+- [Setup](#setup)
 - [Dataset](#dataset)
 - [Architecture](#architecture)
 - [Training](#training)
 - [Experiment Logging](#experiment-logging)
 - [Inference](#inference)
 - [References](#references)
+
+---
+
+## Setup
+
+This code was tested on Ubuntu 18.04 with CUDA 10 & CudNN 7.6
+
+Install the <a href="https://github.com/cocodataset/cocoapi"> COCO Python API </a>, for data preparation. 
 
 ---
 
@@ -119,7 +128,7 @@ The experiment output log directory is structured as follows:
 
 ### Inference 
 
-- **....**
+- **..TO-DO..**
 
 
 ---
